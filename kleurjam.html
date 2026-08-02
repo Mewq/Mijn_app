@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Kleurjam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#161527;
+    --panel:#262448;
+    --panel-2:#312c5e;
+    --slot:#1c1a37;
+    --amber:#FFB238;
+    --amber-dark:#e2942a;
+    --cream:#F5EFE6;
+    --muted:#9d98c7;
+    --mint:#3ddc97;
+    --frame:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:radial-gradient(circle at 50% -10%, #3a3570 0%, #201e3d 45%, #131225 100%);
+    font-family:'Nunito',system-ui,sans-serif;
+    color:var(--cream);
+    display:flex;
+    justify-content:center;
+    padding:18px 12px 34px;
+  }
+  #app{width:100%;max-width:440px;user-select:none;-webkit-user-select:none;}
+  header{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    margin-bottom:14px;gap:10px;flex-wrap:wrap;
+  }
+  .title-wrap{flex:1 1 auto;min-width:0;}
+  .title-wrap h1{
+    font-family:'Baloo 2',system-ui,sans-serif;
+    font-size:30px;font-weight:800;letter-spacing:.5px;margin:0;line-height:1;
+    background:linear-gradient(180deg,#fff, var(--amber) 140%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .title-wrap p{margin:4px 0 0;font-size:13px;color:var(--muted);font-weight:600;}
+  .hud{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 1 auto;}
+  .pill-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+  .pill{
+    background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:999px;
+    padding:6px 12px;font-size:12px;font-weight:700;color:var(--muted);
+    display:flex;align-items:center;gap:6px;white-space:nowrap;
+  }
+  .pill b{color:var(--cream);font-family:'Baloo 2';font-weight:700;}
+  .btn-row{display:flex;gap:6px;}
+  .icon-btn{
+    background:var(--panel);border:1px solid rgba(255,255,255,.1);color:var(--cream);
+    border-radius:999px;padding:6px 13px;font-size:12px;font-weight:700;
+    font-family:'Nunito',sans-serif;cursor:pointer;display:flex;align-items:center;gap:6px;
+    transition:transform .15s ease, background .15s ease, opacity .15s ease;
+  }
+  .icon-btn:hover{background:var(--panel-2);}
+  .icon-btn:active{transform:scale(.94);}
+  .icon-btn:disabled{opacity:.35;cursor:default;}
+  .icon-btn:focus-visible,.lvl-tile:focus-visible,.btn-primary:focus-visible,.btn-secondary:focus-visible{
+    outline:2px solid var(--amber);outline-offset:2px;
+  }
+
+  #level-banner{
+    display:flex;align-items:baseline;justify-content:space-between;
+    margin-bottom:12px;gap:10px;
+  }
+  #level-banner .lvl-name{font-family:'Baloo 2';font-weight:700;font-size:16px;color:var(--cream);}
+  #level-banner .lvl-num{color:var(--amber);font-weight:800;}
+  #level-banner .lvl-meta{font-size:11.5px;color:var(--muted);font-weight:700;white-space:nowrap;}
+
+  #board-wrap{width:100%;display:flex;justify-content:center;margin-bottom:16px;}
+  #board{
+    position:relative;
+    background:linear-gradient(160deg,var(--panel),var(--panel-2) 120%);
+    border-radius:22px;
+    box-shadow:
+      inset 0 0 0 1.5px rgba(255,255,255,.06),
+      0 24px 44px -14px rgba(0,0,0,.6);
+    overflow:visible;
+  }
+  .cells-layer{position:absolute;display:grid;}
+  .cell{
+    background:var(--slot);margin:var(--cell-gap,3px);border-radius:var(--cell-rad,10px);
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.45), inset 0 -1px 0 rgba(255,255,255,.03);
+  }
+  .cell.wall{
+    margin:0;border-radius:0;
+    background:repeating-linear-gradient(45deg, #4a4468 0 5px, #3b3656 5px 10px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .gate{
+    position:absolute;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.25), 0 0 12px 1px currentColor;
+    opacity:.92;animation:gate-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes gate-pulse{0%,100%{filter:brightness(1);}50%{filter:brightness(1.28);}}
+  .blocks-layer{position:absolute;}
+
+  .block{
+    /* only the filled cells may be grabbed: the empty corner of an L or T shape
+       must let the block underneath receive the touch */
+    pointer-events:none;
+    position:absolute;cursor:grab;touch-action:none;
+    transition:left .26s cubic-bezier(.2,.8,.3,1.2), top .26s cubic-bezier(.2,.8,.3,1.2), opacity .3s ease;
+    filter:drop-shadow(0 7px 10px rgba(0,0,0,.5));
+  }
+  .block.dragging{transition:none;cursor:grabbing;z-index:20;filter:drop-shadow(0 13px 18px rgba(0,0,0,.65));}
+  .block.exited{pointer-events:none;}
+  .bcell{position:absolute;pointer-events:auto;}
+  .grip{
+    position:absolute;display:grid;place-items:center;
+    pointer-events:none;opacity:.55;
+  }
+  .grip .dot{
+    position:absolute;left:50%;top:50%;
+    width:var(--dot,5px);height:var(--dot,5px);
+    margin:calc(var(--dot,5px) / -2) 0 0 calc(var(--dot,5px) / -2);
+    border-radius:50%;background:rgba(255,255,255,.95);
+  }
+  .grip.free .dot.n{transform:translateY(calc(-1 * var(--reach,8px)));}
+  .grip.free .dot.s{transform:translateY(var(--reach,8px));}
+  .grip.free .dot.e{transform:translateX(var(--reach,8px));}
+  .grip.free .dot.w{transform:translateX(calc(-1 * var(--reach,8px)));}
+  .grip.free .dot.c{opacity:.7;}
+  .grip.horiz .dot.a{transform:translateX(calc(-1 * var(--reach,8px)));}
+  .grip.horiz .dot.b{transform:translateX(var(--reach,8px));}
+  .grip.vert .dot.a{transform:translateY(calc(-1 * var(--reach,8px)));}
+  .grip.vert .dot.b{transform:translateY(var(--reach,8px));}
+
+  .c-stone{background-image:linear-gradient(135deg,#8f8ab0,#6b6690 55%,#4e4a6e);}
+  .c-red{background-image:linear-gradient(135deg,#ff8184,#F94144 55%,#d92e31);}
+  .c-orange{background-image:linear-gradient(135deg,#ffab6d,#F3722C 55%,#d15c1c);}
+  .c-yellow{background-image:linear-gradient(135deg,#ffe9ac,#F9C74F 55%,#e0a827);}
+  .c-green{background-image:linear-gradient(135deg,#8fe3c4,#43AA8B 55%,#2f8a6d);}
+  .c-teal{background-image:linear-gradient(135deg,#95edf2,#22B8CF 55%,#1795a8);}
+  .c-blue{background-image:linear-gradient(135deg,#7fc0dd,#277DA1 55%,#1c5f7d);}
+  .c-purple{background-image:linear-gradient(135deg,#dab6ff,#9D4EDD 55%,#7d2fc0);}
+  .c-pink{background-image:linear-gradient(135deg,#ffa3cb,#F72585 55%,#d10f68);}
+
+  .gate.c-red{color:#F94144;background-image:linear-gradient(135deg,#ff9092,#F94144);}
+  .gate.c-orange{color:#F3722C;background-image:linear-gradient(135deg,#ffb583,#F3722C);}
+  .gate.c-yellow{color:#F9C74F;background-image:linear-gradient(135deg,#ffedb8,#F9C74F);}
+  .gate.c-green{color:#43AA8B;background-image:linear-gradient(135deg,#a0ecd2,#43AA8B);}
+  .gate.c-teal{color:#22B8CF;background-image:linear-gradient(135deg,#aef1f5,#22B8CF);}
+  .gate.c-blue{color:#277DA1;background-image:linear-gradient(135deg,#9cd2ea,#277DA1);}
+  .gate.c-purple{color:#9D4EDD;background-image:linear-gradient(135deg,#e4c6ff,#9D4EDD);}
+  .gate.c-pink{color:#F72585;background-image:linear-gradient(135deg,#ffbcdb,#F72585);}
+
+  #hint{
+    text-align:center;font-size:12.5px;color:var(--muted);font-weight:600;
+    margin:-4px 0 16px;min-height:16px;
+  }
+
+  .levels-head{
+    display:flex;align-items:center;justify-content:space-between;
+    margin:0 2px 8px;font-size:12px;font-weight:800;color:var(--muted);
+    letter-spacing:.6px;text-transform:uppercase;
+  }
+  #levels{
+    display:grid;grid-template-columns:repeat(5,1fr);gap:8px;
+  }
+  .lvl-tile{
+    background:var(--panel);border:1px solid rgba(255,255,255,.08);
+    border-radius:14px;padding:8px 4px 6px;cursor:pointer;color:var(--muted);
+    font-family:'Nunito',sans-serif;text-align:center;
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    transition:transform .15s ease, background .15s ease;
+  }
+  .lvl-tile .n{font-family:'Baloo 2';font-weight:700;font-size:16px;color:var(--cream);line-height:1;}
+  .lvl-tile .p{font-size:9.5px;font-weight:700;letter-spacing:.3px;}
+  .lvl-tile.active{
+    background:linear-gradient(160deg,var(--amber),var(--amber-dark));
+    box-shadow:0 6px 14px -4px rgba(255,178,56,.55);
+  }
+  .lvl-tile.active .n,.lvl-tile.active .p{color:#2b1c02;}
+  .lvl-tile.solved:not(.active){border-color:rgba(61,220,151,.4);}
+  .lvl-tile.solved:not(.active) .p{color:var(--mint);}
+  .lvl-tile.perfect:not(.active) .n{color:var(--mint);}
+  .lvl-tile:active{transform:scale(.93);}
+
+  #win-modal{
+    position:fixed;inset:0;background:rgba(15,14,28,.72);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center;z-index:100;
+    opacity:0;pointer-events:none;transition:opacity .25s ease;
+  }
+  #win-modal.show{opacity:1;pointer-events:auto;}
+  .win-card{
+    position:relative;overflow:hidden;
+    background:linear-gradient(165deg,var(--panel),var(--panel-2));
+    border-radius:24px;padding:30px 26px 26px;width:290px;text-align:center;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.08);
+    transform:translateY(14px) scale(.96);
+    transition:transform .3s cubic-bezier(.2,.8,.3,1.3);
+  }
+  #win-modal.show .win-card{transform:translateY(0) scale(1);}
+  .win-card .emoji{font-size:44px;margin-bottom:6px;}
+  .win-card h2{font-family:'Baloo 2';margin:0 0 4px;font-size:24px;color:var(--mint);}
+  .win-card p{margin:0 0 20px;color:var(--muted);font-weight:600;font-size:13.5px;}
+  .win-actions{display:flex;flex-direction:column;gap:10px;}
+  .btn-primary{
+    background:linear-gradient(160deg,var(--amber),var(--amber-dark));
+    border:none;color:#2b1c02;font-family:'Baloo 2';font-weight:700;font-size:15px;
+    padding:12px;border-radius:14px;cursor:pointer;
+  }
+  .btn-secondary{
+    background:transparent;border:1px solid rgba(255,255,255,.15);color:var(--cream);
+    font-family:'Nunito';font-weight:700;font-size:13px;padding:10px;border-radius:14px;cursor:pointer;
+  }
+  .confetti{position:absolute;width:8px;height:14px;top:-20px;border-radius:2px;animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(560px) rotate(540deg);opacity:0;}}
+  footer{text-align:center;margin-top:18px;font-size:11px;color:rgba(157,152,199,.6);}
+
+  @media (max-width:390px){
+    .title-wrap h1{font-size:25px;}
+    .title-wrap p{font-size:12px;}
+    .pill{padding:5px 9px;font-size:11px;}
+    .icon-btn{padding:5px 10px;font-size:11px;}
+    #levels{grid-template-columns:repeat(4,1fr);}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important;}
+    .block{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title-wrap">
+      <h1>KLEURJAM</h1>
+      <p>Sleep elk gekleurd blok naar zijn poort</p>
+    </div>
+    <div class="hud">
+      <div class="pill-row">
+        <div class="pill">🕹️ <b id="moves-count">0</b> zetten</div>
+        <div class="pill">🧩 <b id="left-count">0</b> te gaan</div>
+      </div>
+      <div class="btn-row">
+        <button class="icon-btn" id="undo-btn" disabled>↶ Terug</button>
+        <button class="icon-btn" id="restart-btn">↺ Opnieuw</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="level-banner">
+    <div class="lvl-name"><span class="lvl-num" id="lvl-num">1</span> — <span id="lvl-name">Opwarmertje</span></div>
+    <div class="lvl-meta" id="lvl-meta"></div>
+  </div>
+
+  <div id="board-wrap">
+    <div id="board">
+      <div class="cells-layer" id="cells-layer"></div>
+      <div id="gates-layer"></div>
+      <div class="blocks-layer" id="blocks-layer"></div>
+    </div>
+  </div>
+
+  <div id="hint"></div>
+
+  <div class="levels-head"><span>Levels</span><span id="levels-progress"></span></div>
+  <div id="levels"></div>
+
+  <footer>Grijze stenen blijven altijd op het bord — schuif ze aan de kant</footer>
+</div>
+
+<div id="win-modal">
+  <div class="win-card">
+    <div class="emoji" id="win-emoji">🎉</div>
+    <h2 id="win-title">Level gehaald!</h2>
+    <p id="win-sub">Opgelost in 0 zetten</p>
+    <div class="win-actions">
+      <button class="btn-primary" id="next-level-btn">Volgend level →</button>
+      <button class="btn-secondary" id="replay-btn">Speel nog eens</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const FRAME = 14;
+  let GAP = 6;          // scaled to the cell size in computeCellSize()
+  let RAD = 12;
+
+  /* Alle levels spelen op een 12x12 bord en zijn machinaal gegenereerd en
+     nagerekend: van elk level bestaat een uitgespeelde oplossing van precies
+     `par` zetten. `par` is dus de kortste route die wij gevonden hebben — een
+     streefgetal, geen bewezen minimum. */
+  const LEVELS = [
+    {
+      name:"Eerste kleur", par:6,
+      rows:12, cols:12,
+      walls:[[1,9],[1,10],[9,4],[9,5]],
+      blocks:[
+        {id:"b0",color:"purple",move:"H",row:4,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b1",color:"red",move:"A",row:2,col:9,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b2",color:"teal",move:"V",row:4,col:4,cells:[[0,0],[0,1]]},
+        {id:"b3",color:"pink",move:"H",row:9,col:2,cells:[[0,0],[0,1],[1,0],[2,0],[2,1]]},
+        {id:"b4",color:"stone",move:"A",row:6,col:5,cells:[[0,0],[1,0]]},
+        {id:"b5",color:"stone",move:"A",row:5,col:6,cells:[[0,0],[1,0]]}
+      ],
+      gates:[{color:"purple",side:"left",index:4,span:2},{color:"red",side:"bottom",index:6,span:4},{color:"teal",side:"top",index:3,span:3},{color:"pink",side:"left",index:9,span:3}],
+      hint:"Sleep elk blok naar de poort met dezelfde kleur."
+    },
+    {
+      name:"Voorrang", par:9,
+      rows:12, cols:12,
+      walls:[[7,7],[8,7],[9,7],[1,9]],
+      blocks:[
+        {id:"b0",color:"yellow",move:"A",row:0,col:0,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b1",color:"red",move:"A",row:10,col:1,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b2",color:"purple",move:"A",row:9,col:4,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b3",color:"orange",move:"A",row:8,col:9,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b4",color:"stone",move:"A",row:7,col:8,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b5",color:"stone",move:"V",row:6,col:6,cells:[[0,0],[0,1]]}
+      ],
+      gates:[{color:"yellow",side:"right",index:5,span:3},{color:"red",side:"left",index:9,span:3},{color:"purple",side:"left",index:1,span:4},{color:"orange",side:"bottom",index:6,span:3}],
+      hint:"Eén blok staat het andere in de weg. Wie eerst?"
+    },
+    {
+      name:"Alle kanten op", par:13,
+      rows:12, cols:12,
+      walls:[[10,7],[10,8],[10,9]],
+      blocks:[
+        {id:"b0",color:"red",move:"A",row:0,col:6,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b1",color:"purple",move:"V",row:5,col:0,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b2",color:"pink",move:"A",row:10,col:0,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b3",color:"teal",move:"A",row:0,col:2,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b4",color:"green",move:"A",row:1,col:2,cells:[[0,1],[1,0],[1,1],[1,2],[2,1]]},
+        {id:"b5",color:"yellow",move:"A",row:8,col:0,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b6",color:"stone",move:"H",row:6,col:6,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b7",color:"stone",move:"A",row:4,col:5,cells:[[0,0],[0,1],[1,0]]}
+      ],
+      gates:[{color:"red",side:"right",index:8,span:3},{color:"purple",side:"top",index:0,span:2},{color:"pink",side:"right",index:0,span:3},{color:"teal",side:"bottom",index:4,span:4},{color:"green",side:"left",index:6,span:4},{color:"yellow",side:"top",index:8,span:2}],
+      hint:"De stipjes op een blok verklappen welke kant het op mag."
+    },
+    {
+      name:"Om de muur", par:17,
+      rows:12, cols:12,
+      walls:[[9,2],[10,2],[9,6],[9,7]],
+      blocks:[
+        {id:"b0",color:"teal",move:"A",row:0,col:6,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b1",color:"green",move:"A",row:10,col:0,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b2",color:"orange",move:"H",row:4,col:0,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b3",color:"pink",move:"A",row:1,col:3,cells:[[0,1],[1,0],[1,1],[2,0],[2,1]]},
+        {id:"b4",color:"purple",move:"A",row:10,col:3,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b5",color:"blue",move:"V",row:0,col:3,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b6",color:"yellow",move:"A",row:10,col:11,cells:[[0,0],[1,0]]},
+        {id:"b7",color:"red",move:"A",row:0,col:1,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b8",color:"stone",move:"A",row:3,col:7,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b9",color:"stone",move:"A",row:5,col:5,cells:[[0,0],[0,1],[1,0],[1,1]]}
+      ],
+      gates:[{color:"teal",side:"bottom",index:9,span:3},{color:"green",side:"bottom",index:0,span:4},{color:"orange",side:"left",index:3,span:4},{color:"pink",side:"left",index:9,span:3},{color:"purple",side:"right",index:1,span:3},{color:"blue",side:"top",index:3,span:3},{color:"yellow",side:"top",index:1,span:1},{color:"red",side:"right",index:5,span:2}],
+      hint:"Door de gestreepte muren kun je niet heen."
+    },
+    {
+      name:"Grijze stenen", par:22,
+      rows:12, cols:12,
+      walls:[[9,10],[2,4],[2,5],[2,6]],
+      blocks:[
+        {id:"b0",color:"purple",move:"A",row:0,col:3,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b1",color:"teal",move:"A",row:9,col:0,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b2",color:"blue",move:"A",row:4,col:6,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b3",color:"green",move:"A",row:0,col:0,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b4",color:"pink",move:"V",row:4,col:10,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b5",color:"yellow",move:"A",row:6,col:8,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b6",color:"orange",move:"A",row:9,col:7,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b7",color:"red",move:"A",row:10,col:10,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b8",color:"stone",move:"A",row:5,col:7,cells:[[0,0],[0,1]]},
+        {id:"b9",color:"stone",move:"A",row:6,col:3,cells:[[0,0],[0,1],[1,0],[1,1]]}
+      ],
+      gates:[{color:"purple",side:"left",index:5,span:4},{color:"teal",side:"top",index:5,span:4},{color:"blue",side:"top",index:2,span:2},{color:"green",side:"bottom",index:5,span:3},{color:"pink",side:"top",index:10,span:2},{color:"yellow",side:"right",index:3,span:4},{color:"orange",side:"left",index:0,span:3},{color:"red",side:"bottom",index:9,span:3}],
+      hint:"Grijze stenen hoeven niet weg, maar ze zitten wel in de weg."
+    },
+    {
+      name:"Kettingreactie", par:27,
+      rows:12, cols:12,
+      walls:[[3,1],[4,1],[5,1],[1,6],[2,6],[3,6]],
+      blocks:[
+        {id:"b0",color:"yellow",move:"A",row:2,col:7,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b1",color:"purple",move:"A",row:0,col:8,cells:[[0,0],[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b2",color:"pink",move:"V",row:3,col:4,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b3",color:"red",move:"A",row:9,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b4",color:"teal",move:"A",row:2,col:2,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b5",color:"orange",move:"A",row:0,col:10,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b6",color:"yellow",move:"H",row:8,col:3,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b7",color:"purple",move:"A",row:9,col:1,cells:[[0,1],[1,0],[1,1],[2,0],[2,1]]},
+        {id:"b8",color:"pink",move:"V",row:10,col:4,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b9",color:"red",move:"A",row:7,col:1,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b10",color:"green",move:"A",row:0,col:5,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b11",color:"stone",move:"A",row:6,col:2,cells:[[0,0],[0,1]]},
+        {id:"b12",color:"stone",move:"A",row:6,col:7,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b13",color:"stone",move:"V",row:6,col:0,cells:[[0,0],[0,1],[1,0]]}
+      ],
+      gates:[{color:"yellow",side:"right",index:8,span:2},{color:"purple",side:"right",index:0,span:3},{color:"pink",side:"bottom",index:4,span:3},{color:"red",side:"top",index:0,span:2},{color:"green",side:"top",index:4,span:3},{color:"teal",side:"left",index:1,span:2},{color:"orange",side:"top",index:10,span:2}],
+      hint:"Zoek het blok dat als eerste naar buiten kan."
+    },
+    {
+      name:"Even terug", par:33,
+      rows:12, cols:12,
+      walls:[[4,3],[4,4],[5,3],[5,4],[5,5]],
+      blocks:[
+        {id:"b0",color:"red",move:"A",row:10,col:6,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b1",color:"green",move:"A",row:5,col:0,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b2",color:"orange",move:"A",row:7,col:10,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b3",color:"yellow",move:"V",row:10,col:0,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b4",color:"teal",move:"A",row:0,col:10,cells:[[0,0],[1,0]]},
+        {id:"b5",color:"blue",move:"A",row:0,col:0,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b6",color:"purple",move:"A",row:1,col:9,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b7",color:"pink",move:"A",row:2,col:1,cells:[[0,1],[1,0],[1,1],[1,2],[2,1]]},
+        {id:"b8",color:"red",move:"A",row:1,col:3,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b9",color:"orange",move:"A",row:10,col:9,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b10",color:"yellow",move:"A",row:8,col:7,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b11",color:"teal",move:"A",row:1,col:5,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b12",color:"stone",move:"V",row:7,col:3,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b13",color:"stone",move:"V",row:4,col:0,cells:[[0,0],[0,1]]},
+        {id:"b14",color:"stone",move:"A",row:5,col:6,cells:[[0,0],[1,0]]}
+      ],
+      gates:[{color:"red",side:"right",index:4,span:3},{color:"green",side:"left",index:7,span:3},{color:"orange",side:"top",index:1,span:3},{color:"yellow",side:"bottom",index:0,span:3},{color:"teal",side:"bottom",index:8,span:3},{color:"blue",side:"right",index:8,span:3},{color:"purple",side:"top",index:7,span:4},{color:"pink",side:"left",index:3,span:3}],
+      hint:"Soms moet een blok eerst de verkeerde kant op."
+    },
+    {
+      name:"Vierkant probleem", par:39,
+      rows:12, cols:12,
+      walls:[[8,1],[9,1],[5,9]],
+      blocks:[
+        {id:"b0",color:"pink",move:"A",row:1,col:0,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b1",color:"purple",move:"A",row:3,col:2,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b2",color:"orange",move:"A",row:1,col:4,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b3",color:"green",move:"A",row:7,col:6,cells:[[0,0],[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b4",color:"blue",move:"V",row:9,col:8,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b5",color:"red",move:"V",row:0,col:2,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b6",color:"teal",move:"A",row:2,col:0,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b7",color:"pink",move:"A",row:2,col:9,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b8",color:"purple",move:"H",row:5,col:1,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b9",color:"orange",move:"A",row:0,col:7,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b10",color:"green",move:"A",row:9,col:10,cells:[[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b11",color:"blue",move:"A",row:8,col:5,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b12",color:"red",move:"A",row:1,col:7,cells:[[0,0],[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b13",color:"teal",move:"H",row:3,col:10,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b14",color:"purple",move:"A",row:0,col:10,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b15",color:"orange",move:"A",row:7,col:2,cells:[[0,0],[0,1],[0,2],[1,0],[1,2]]},
+        {id:"b16",color:"green",move:"A",row:6,col:7,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b17",color:"stone",move:"A",row:4,col:6,cells:[[0,0],[0,1]]},
+        {id:"b18",color:"stone",move:"H",row:5,col:4,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b19",color:"stone",move:"V",row:10,col:0,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b20",color:"stone",move:"A",row:6,col:10,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b21",color:"stone",move:"V",row:11,col:6,cells:[[0,0],[0,1]]}
+      ],
+      gates:[{color:"pink",side:"top",index:5,span:3},{color:"purple",side:"left",index:5,span:3},{color:"orange",side:"bottom",index:3,span:3},{color:"green",side:"right",index:7,span:4},{color:"blue",side:"bottom",index:8,span:4},{color:"red",side:"top",index:1,span:3},{color:"teal",side:"right",index:3,span:3}],
+      hint:"Grote vierkanten hebben veel ruimte nodig om te draaien."
+    },
+    {
+      name:"Haakse bocht", par:46,
+      rows:12, cols:12,
+      walls:[[10,1],[2,4],[3,4]],
+      blocks:[
+        {id:"b0",color:"pink",move:"A",row:0,col:9,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b1",color:"blue",move:"A",row:0,col:7,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b2",color:"green",move:"H",row:9,col:3,cells:[[0,0],[0,1]]},
+        {id:"b3",color:"teal",move:"V",row:3,col:5,cells:[[0,0],[0,1],[1,0],[2,0],[2,1]]},
+        {id:"b4",color:"yellow",move:"A",row:5,col:0,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b5",color:"orange",move:"A",row:1,col:1,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b6",color:"pink",move:"A",row:3,col:7,cells:[[0,0],[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b7",color:"blue",move:"A",row:0,col:2,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b8",color:"green",move:"A",row:9,col:9,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b9",color:"teal",move:"V",row:8,col:5,cells:[[0,0],[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b10",color:"yellow",move:"A",row:7,col:5,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b11",color:"orange",move:"A",row:2,col:2,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b12",color:"purple",move:"A",row:7,col:3,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b13",color:"pink",move:"V",row:2,col:9,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b14",color:"blue",move:"A",row:10,col:11,cells:[[0,0],[1,0]]},
+        {id:"b15",color:"green",move:"A",row:8,col:0,cells:[[0,0],[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b16",color:"teal",move:"A",row:10,col:5,cells:[[0,0],[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b17",color:"yellow",move:"A",row:7,col:9,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b18",color:"orange",move:"A",row:4,col:0,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b19",color:"red",move:"A",row:10,col:9,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b20",color:"purple",move:"A",row:10,col:1,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b21",color:"stone",move:"A",row:5,col:3,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b22",color:"stone",move:"A",row:0,col:5,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b23",color:"stone",move:"A",row:6,col:1,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b24",color:"stone",move:"V",row:5,col:9,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b25",color:"stone",move:"V",row:1,col:6,cells:[[0,0],[1,0]]},
+        {id:"b26",color:"stone",move:"A",row:6,col:7,cells:[[0,0],[0,1],[1,1]]}
+      ],
+      gates:[{color:"pink",side:"top",index:9,span:3},{color:"blue",side:"right",index:1,span:3},{color:"green",side:"left",index:7,span:3},{color:"teal",side:"bottom",index:5,span:3},{color:"yellow",side:"right",index:6,span:4},{color:"orange",side:"top",index:0,span:4},{color:"red",side:"left",index:3,span:2},{color:"purple",side:"bottom",index:0,span:4}],
+      hint:"L-vormen passen maar op één manier door de poort."
+    },
+    {
+      name:"Spitsuur", par:59,
+      rows:12, cols:12,
+      walls:[[5,8],[4,8],[4,9],[4,10]],
+      blocks:[
+        {id:"b0",color:"orange",move:"A",row:7,col:1,cells:[[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b1",color:"yellow",move:"A",row:0,col:0,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b2",color:"blue",move:"A",row:1,col:5,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b3",color:"teal",move:"A",row:9,col:4,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b4",color:"pink",move:"A",row:0,col:2,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b5",color:"orange",move:"H",row:4,col:5,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b6",color:"blue",move:"A",row:0,col:10,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b7",color:"teal",move:"A",row:8,col:9,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b8",color:"pink",move:"V",row:2,col:7,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b9",color:"red",move:"V",row:9,col:7,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b10",color:"green",move:"H",row:9,col:0,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b11",color:"orange",move:"A",row:4,col:1,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b12",color:"purple",move:"V",row:1,col:2,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b13",color:"teal",move:"A",row:9,col:10,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b14",color:"red",move:"A",row:11,col:3,cells:[[0,0],[0,1]]},
+        {id:"b15",color:"orange",move:"A",row:6,col:0,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b16",color:"purple",move:"A",row:3,col:8,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b17",color:"yellow",move:"A",row:5,col:1,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b18",color:"blue",move:"H",row:1,col:4,cells:[[0,0],[1,0]]},
+        {id:"b19",color:"pink",move:"A",row:7,col:6,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b20",color:"red",move:"A",row:10,col:8,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b21",color:"orange",move:"A",row:7,col:4,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b22",color:"blue",move:"A",row:5,col:4,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b23",color:"teal",move:"H",row:5,col:10,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b24",color:"pink",move:"A",row:0,col:7,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b25",color:"orange",move:"H",row:3,col:0,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b26",color:"blue",move:"A",row:3,col:3,cells:[[0,0],[0,1]]},
+        {id:"b27",color:"stone",move:"H",row:10,col:2,cells:[[0,0],[1,0]]},
+        {id:"b28",color:"stone",move:"A",row:6,col:7,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b29",color:"green",move:"A",row:6,col:3,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b30",color:"orange",move:"A",row:4,col:3,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b31",color:"yellow",move:"A",row:9,col:3,cells:[[0,0],[1,0]]}
+      ],
+      gates:[{color:"orange",side:"left",index:2,span:4},{color:"purple",side:"bottom",index:1,span:3},{color:"yellow",side:"top",index:0,span:4},{color:"blue",side:"right",index:0,span:3},{color:"teal",side:"right",index:4,span:4},{color:"pink",side:"top",index:6,span:4},{color:"red",side:"bottom",index:7,span:3},{color:"green",side:"left",index:9,span:3}],
+      hint:"Ruim eerst op wat je later nodig hebt."
+    },
+    {
+      name:"Doorgang", par:66,
+      rows:12, cols:12,
+      walls:[[8,6],[9,6],[3,4],[4,4],[5,4]],
+      blocks:[
+        {id:"b0",color:"orange",move:"A",row:3,col:0,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b1",color:"teal",move:"A",row:9,col:10,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b2",color:"pink",move:"A",row:6,col:9,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b3",color:"blue",move:"A",row:5,col:2,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b4",color:"yellow",move:"A",row:9,col:0,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b5",color:"red",move:"A",row:2,col:8,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b6",color:"pink",move:"H",row:1,col:9,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b7",color:"blue",move:"A",row:10,col:6,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b8",color:"yellow",move:"A",row:2,col:0,cells:[[0,0],[0,1]]},
+        {id:"b9",color:"red",move:"V",row:1,col:6,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b10",color:"teal",move:"V",row:5,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b11",color:"green",move:"H",row:9,col:7,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b12",color:"blue",move:"A",row:10,col:3,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b13",color:"purple",move:"A",row:0,col:3,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b14",color:"pink",move:"H",row:1,col:4,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b15",color:"blue",move:"V",row:5,col:1,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b16",color:"purple",move:"A",row:5,col:8,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b17",color:"yellow",move:"A",row:7,col:6,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b18",color:"orange",move:"A",row:7,col:0,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b19",color:"teal",move:"A",row:9,col:1,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b20",color:"pink",move:"H",row:1,col:10,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b21",color:"blue",move:"V",row:11,col:1,cells:[[0,0],[0,1]]},
+        {id:"b22",color:"purple",move:"A",row:0,col:0,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b23",color:"yellow",move:"H",row:1,col:2,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b24",color:"orange",move:"H",row:6,col:5,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b25",color:"red",move:"V",row:4,col:7,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b26",color:"stone",move:"V",row:8,col:7,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b27",color:"stone",move:"A",row:4,col:5,cells:[[0,0],[1,0]]},
+        {id:"b28",color:"purple",move:"A",row:0,col:7,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b29",color:"red",move:"A",row:6,col:3,cells:[[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b30",color:"blue",move:"A",row:9,col:4,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b31",color:"stone",move:"A",row:3,col:5,cells:[[0,0],[0,1],[1,1]]}
+      ],
+      gates:[{color:"orange",side:"left",index:5,span:4},{color:"red",side:"top",index:6,span:4},{color:"teal",side:"bottom",index:9,span:3},{color:"green",side:"right",index:8,span:3},{color:"pink",side:"right",index:1,span:3},{color:"blue",side:"bottom",index:0,span:3},{color:"purple",side:"top",index:1,span:4},{color:"yellow",side:"left",index:0,span:4}],
+      hint:"Alles moet door hetzelfde gat."
+    },
+    {
+      name:"Knooppunt", par:73,
+      rows:12, cols:12,
+      walls:[[10,1],[8,7],[9,7],[10,7]],
+      blocks:[
+        {id:"b0",color:"purple",move:"A",row:10,col:5,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b1",color:"blue",move:"A",row:0,col:5,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b2",color:"green",move:"V",row:2,col:3,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b3",color:"yellow",move:"A",row:3,col:6,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b4",color:"purple",move:"A",row:10,col:2,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b5",color:"blue",move:"H",row:4,col:5,cells:[[0,0],[1,0]]},
+        {id:"b6",color:"yellow",move:"V",row:0,col:8,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b7",color:"orange",move:"A",row:10,col:8,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b8",color:"red",move:"A",row:9,col:0,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b9",color:"purple",move:"A",row:9,col:4,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b10",color:"blue",move:"A",row:3,col:1,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b11",color:"green",move:"A",row:1,col:2,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b12",color:"pink",move:"H",row:6,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b13",color:"yellow",move:"A",row:8,col:10,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b14",color:"red",move:"A",row:4,col:3,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b15",color:"purple",move:"V",row:7,col:5,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b16",color:"blue",move:"A",row:4,col:10,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b17",color:"green",move:"V",row:0,col:3,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b18",color:"pink",move:"H",row:6,col:8,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b19",color:"yellow",move:"V",row:9,col:9,cells:[[0,0],[1,0]]},
+        {id:"b20",color:"orange",move:"A",row:0,col:0,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b21",color:"red",move:"A",row:6,col:0,cells:[[0,0],[1,0]]},
+        {id:"b22",color:"yellow",move:"V",row:2,col:8,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b23",color:"orange",move:"A",row:9,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b24",color:"red",move:"A",row:1,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b25",color:"blue",move:"A",row:5,col:0,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b26",color:"green",move:"A",row:4,col:8,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b27",color:"stone",move:"A",row:6,col:4,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b28",color:"stone",move:"A",row:7,col:3,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b29",color:"pink",move:"A",row:6,col:6,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b30",color:"green",move:"A",row:1,col:6,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b31",color:"stone",move:"H",row:7,col:1,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b32",color:"yellow",move:"V",row:6,col:9,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b33",color:"purple",move:"A",row:1,col:0,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b34",color:"stone",move:"A",row:11,col:0,cells:[[0,0],[0,1]]},
+        {id:"b35",color:"stone",move:"A",row:5,col:6,cells:[[0,0],[0,1]]}
+      ],
+      gates:[{color:"red",side:"right",index:1,span:3},{color:"purple",side:"bottom",index:5,span:3},{color:"blue",side:"left",index:4,span:4},{color:"green",side:"top",index:3,span:3},{color:"pink",side:"right",index:5,span:4},{color:"yellow",side:"top",index:8,span:4},{color:"orange",side:"bottom",index:9,span:3}],
+      hint:"Twee blokken houden elkaar vast. Eentje moet wijken."
+    },
+    {
+      name:"Opstopping", par:85,
+      rows:12, cols:12,
+      walls:[[6,6],[6,7],[5,9],[5,10]],
+      blocks:[
+        {id:"b0",color:"yellow",move:"V",row:7,col:2,cells:[[0,0],[0,1]]},
+        {id:"b1",color:"teal",move:"A",row:9,col:11,cells:[[0,0],[1,0]]},
+        {id:"b2",color:"purple",move:"V",row:1,col:6,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b3",color:"orange",move:"A",row:1,col:9,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b4",color:"pink",move:"A",row:3,col:0,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b5",color:"yellow",move:"A",row:9,col:0,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b6",color:"purple",move:"A",row:0,col:5,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b7",color:"orange",move:"A",row:5,col:0,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b8",color:"red",move:"A",row:3,col:10,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b9",color:"blue",move:"H",row:2,col:2,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b10",color:"green",move:"A",row:0,col:0,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b11",color:"yellow",move:"A",row:6,col:8,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b12",color:"orange",move:"A",row:0,col:9,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b13",color:"red",move:"A",row:0,col:7,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b14",color:"blue",move:"A",row:6,col:9,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b15",color:"green",move:"A",row:8,col:3,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b16",color:"yellow",move:"A",row:6,col:4,cells:[[0,0],[1,0]]},
+        {id:"b17",color:"purple",move:"A",row:1,col:4,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b18",color:"orange",move:"A",row:10,col:4,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b19",color:"red",move:"A",row:2,col:7,cells:[[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b20",color:"blue",move:"A",row:2,col:1,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b21",color:"green",move:"A",row:7,col:0,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b22",color:"yellow",move:"A",row:10,col:1,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b23",color:"purple",move:"A",row:0,col:2,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b24",color:"orange",move:"A",row:8,col:10,cells:[[0,0],[0,1]]},
+        {id:"b25",color:"blue",move:"H",row:4,col:2,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b26",color:"green",move:"V",row:9,col:9,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b27",color:"yellow",move:"A",row:9,col:7,cells:[[0,0],[1,0]]},
+        {id:"b28",color:"stone",move:"A",row:6,col:5,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b29",color:"stone",move:"A",row:3,col:5,cells:[[0,0],[0,1]]},
+        {id:"b30",color:"stone",move:"A",row:4,col:5,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b31",color:"stone",move:"A",row:8,col:6,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b32",color:"green",move:"V",row:8,col:8,cells:[[0,1],[1,0],[1,1]]}
+      ],
+      gates:[{color:"blue",side:"left",index:2,span:4},{color:"green",side:"bottom",index:8,span:3},{color:"yellow",side:"bottom",index:2,span:3},{color:"teal",side:"right",index:3,span:3},{color:"purple",side:"top",index:5,span:3},{color:"orange",side:"left",index:9,span:2},{color:"pink",side:"right",index:9,span:3},{color:"red",side:"top",index:0,span:4}],
+      hint:"Werk van buiten naar binnen: leeg eerst de randen."
+    },
+    {
+      name:"Puzzelplein", par:97,
+      rows:12, cols:12,
+      walls:[[3,4],[3,5],[7,3],[8,3]],
+      blocks:[
+        {id:"b0",color:"blue",move:"A",row:3,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b1",color:"orange",move:"A",row:1,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b2",color:"green",move:"V",row:7,col:7,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b3",color:"pink",move:"A",row:2,col:6,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b4",color:"teal",move:"A",row:3,col:0,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b5",color:"blue",move:"A",row:4,col:9,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b6",color:"orange",move:"V",row:10,col:0,cells:[[0,0],[1,0],[1,1],[1,2]]},
+        {id:"b7",color:"green",move:"A",row:7,col:9,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b8",color:"yellow",move:"A",row:6,col:8,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b9",color:"pink",move:"A",row:0,col:4,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b10",color:"red",move:"H",row:4,col:4,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b11",color:"orange",move:"A",row:8,col:1,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b12",color:"green",move:"A",row:9,col:7,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b13",color:"yellow",move:"A",row:9,col:10,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b14",color:"teal",move:"A",row:5,col:2,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b15",color:"blue",move:"H",row:1,col:8,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b16",color:"red",move:"H",row:6,col:0,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b17",color:"green",move:"A",row:6,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b18",color:"yellow",move:"H",row:8,col:3,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b19",color:"pink",move:"A",row:4,col:7,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b20",color:"teal",move:"H",row:0,col:0,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b21",color:"blue",move:"A",row:9,col:5,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b22",color:"purple",move:"A",row:0,col:6,cells:[[0,0],[1,0]]},
+        {id:"b23",color:"pink",move:"A",row:6,col:3,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b24",color:"teal",move:"A",row:4,col:0,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b25",color:"red",move:"A",row:1,col:3,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b26",color:"purple",move:"V",row:0,col:8,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b27",color:"stone",move:"A",row:4,col:6,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b28",color:"stone",move:"A",row:6,col:6,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b29",color:"orange",move:"A",row:9,col:8,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b30",color:"blue",move:"A",row:2,col:9,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b31",color:"red",move:"A",row:2,col:1,cells:[[0,0],[0,1]]},
+        {id:"b32",color:"stone",move:"A",row:10,col:3,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b33",color:"stone",move:"A",row:8,col:0,cells:[[0,0],[1,0]]},
+        {id:"b34",color:"red",move:"A",row:9,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b35",color:"purple",move:"A",row:8,col:6,cells:[[0,0],[1,0]]},
+        {id:"b36",color:"stone",move:"A",row:0,col:0,cells:[[0,0],[0,1]]}
+      ],
+      gates:[{color:"blue",side:"right",index:1,span:3},{color:"red",side:"left",index:4,span:4},{color:"purple",side:"top",index:8,span:3},{color:"orange",side:"bottom",index:0,span:3},{color:"green",side:"bottom",index:6,span:3},{color:"yellow",side:"right",index:7,span:4},{color:"pink",side:"top",index:1,span:4},{color:"teal",side:"left",index:0,span:3}],
+      hint:"Bijna honderd zetten. Neem de tijd."
+    },
+    {
+      name:"De grote jam", par:97,
+      rows:12, cols:12,
+      walls:[[1,7],[1,8],[5,6]],
+      blocks:[
+        {id:"b0",color:"yellow",move:"A",row:5,col:9,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b1",color:"blue",move:"A",row:9,col:0,cells:[[0,0],[0,1]]},
+        {id:"b2",color:"green",move:"A",row:1,col:0,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b3",color:"orange",move:"H",row:3,col:1,cells:[[0,0],[0,1]]},
+        {id:"b4",color:"teal",move:"A",row:0,col:3,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b5",color:"pink",move:"A",row:3,col:8,cells:[[0,0],[0,1]]},
+        {id:"b6",color:"purple",move:"A",row:4,col:9,cells:[[0,0],[0,1],[0,2],[1,2]]},
+        {id:"b7",color:"yellow",move:"A",row:10,col:7,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b8",color:"blue",move:"A",row:2,col:2,cells:[[0,0],[0,1],[1,1],[1,2]]},
+        {id:"b9",color:"green",move:"H",row:6,col:3,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b10",color:"teal",move:"A",row:7,col:4,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b11",color:"pink",move:"A",row:10,col:3,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b12",color:"red",move:"A",row:4,col:2,cells:[[0,1],[1,0],[1,1],[2,0]]},
+        {id:"b13",color:"green",move:"A",row:9,col:5,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b14",color:"red",move:"A",row:7,col:0,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b15",color:"yellow",move:"A",row:3,col:10,cells:[[0,0],[0,1]]},
+        {id:"b16",color:"blue",move:"A",row:2,col:7,cells:[[0,0],[0,1],[1,0],[2,0]]},
+        {id:"b17",color:"green",move:"A",row:5,col:4,cells:[[0,0],[0,1]]},
+        {id:"b18",color:"pink",move:"H",row:0,col:9,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b19",color:"yellow",move:"H",row:8,col:10,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b20",color:"blue",move:"A",row:1,col:3,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b21",color:"green",move:"A",row:4,col:0,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b22",color:"orange",move:"H",row:1,col:6,cells:[[0,0],[1,0]]},
+        {id:"b23",color:"teal",move:"A",row:0,col:1,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b24",color:"pink",move:"A",row:10,col:9,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b25",color:"red",move:"A",row:10,col:0,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b26",color:"yellow",move:"H",row:9,col:6,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b27",color:"blue",move:"A",row:5,col:7,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b28",color:"stone",move:"A",row:4,col:5,cells:[[0,0],[0,1]]},
+        {id:"b29",color:"stone",move:"A",row:6,col:6,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b30",color:"orange",move:"A",row:7,col:8,cells:[[0,1],[1,1],[2,0],[2,1]]},
+        {id:"b31",color:"green",move:"A",row:8,col:3,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b32",color:"stone",move:"H",row:8,col:2,cells:[[0,0],[1,0]]},
+        {id:"b33",color:"green",move:"A",row:0,col:6,cells:[[0,0],[0,1]]},
+        {id:"b34",color:"stone",move:"A",row:6,col:11,cells:[[0,0],[1,0]]}
+      ],
+      gates:[{color:"red",side:"bottom",index:0,span:3},{color:"purple",side:"top",index:7,span:4},{color:"yellow",side:"right",index:8,span:3},{color:"blue",side:"bottom",index:7,span:3},{color:"green",side:"left",index:5,span:3},{color:"orange",side:"left",index:1,span:3},{color:"teal",side:"top",index:1,span:3},{color:"pink",side:"right",index:0,span:3}],
+      hint:"Ruim de poorten leeg voordat je aan het midden begint."
+    },
+    {
+      name:"Vastgelopen", par:102,
+      rows:12, cols:12,
+      walls:[[8,8],[3,7],[4,7]],
+      blocks:[
+        {id:"b0",color:"yellow",move:"H",row:1,col:5,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b1",color:"pink",move:"A",row:6,col:7,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b2",color:"orange",move:"H",row:9,col:5,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b3",color:"red",move:"V",row:0,col:0,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b4",color:"blue",move:"A",row:0,col:4,cells:[[0,0]]},
+        {id:"b5",color:"pink",move:"A",row:9,col:0,cells:[[0,0],[1,0]]},
+        {id:"b6",color:"orange",move:"H",row:10,col:9,cells:[[0,0],[0,1]]},
+        {id:"b7",color:"purple",move:"A",row:6,col:2,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b8",color:"red",move:"V",row:6,col:0,cells:[[0,0],[1,0]]},
+        {id:"b9",color:"teal",move:"V",row:11,col:9,cells:[[0,0]]},
+        {id:"b10",color:"yellow",move:"A",row:6,col:1,cells:[[0,0]]},
+        {id:"b11",color:"pink",move:"A",row:11,col:7,cells:[[0,0],[0,1]]},
+        {id:"b12",color:"orange",move:"H",row:9,col:2,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b13",color:"green",move:"H",row:3,col:9,cells:[[0,0]]},
+        {id:"b14",color:"red",move:"V",row:0,col:2,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b15",color:"yellow",move:"A",row:4,col:0,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b16",color:"pink",move:"H",row:8,col:1,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b17",color:"orange",move:"A",row:6,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b18",color:"purple",move:"A",row:0,col:8,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b19",color:"red",move:"A",row:4,col:4,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b20",color:"teal",move:"A",row:8,col:0,cells:[[0,0]]},
+        {id:"b21",color:"yellow",move:"A",row:4,col:2,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b22",color:"blue",move:"A",row:1,col:5,cells:[[0,0]]},
+        {id:"b23",color:"orange",move:"A",row:1,col:10,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b24",color:"purple",move:"A",row:4,col:9,cells:[[0,0],[1,0]]},
+        {id:"b25",color:"teal",move:"A",row:4,col:10,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b26",color:"yellow",move:"A",row:5,col:8,cells:[[0,0],[1,0]]},
+        {id:"b27",color:"pink",move:"A",row:2,col:2,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b28",color:"orange",move:"A",row:6,col:3,cells:[[0,0],[0,1]]},
+        {id:"b29",color:"purple",move:"V",row:10,col:2,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b30",color:"red",move:"A",row:2,col:1,cells:[[0,0],[1,0]]},
+        {id:"b31",color:"yellow",move:"A",row:7,col:4,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b32",color:"blue",move:"A",row:0,col:5,cells:[[0,0]]},
+        {id:"b33",color:"pink",move:"H",row:10,col:1,cells:[[0,0]]},
+        {id:"b34",color:"orange",move:"H",row:9,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b35",color:"teal",move:"V",row:9,col:8,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b36",color:"yellow",move:"H",row:1,col:3,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b37",color:"pink",move:"H",row:11,col:1,cells:[[0,0]]},
+        {id:"b38",color:"green",move:"A",row:2,col:7,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b39",color:"stone",move:"A",row:5,col:5,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b40",color:"stone",move:"A",row:3,col:4,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b41",color:"stone",move:"A",row:8,col:9,cells:[[0,0],[0,1]]},
+        {id:"b42",color:"stone",move:"H",row:5,col:7,cells:[[0,0],[1,0]]},
+        {id:"b43",color:"purple",move:"A",row:11,col:5,cells:[[0,0]]},
+        {id:"b44",color:"purple",move:"A",row:10,col:4,cells:[[0,0],[1,0]]},
+        {id:"b45",color:"pink",move:"A",row:1,col:0,cells:[[0,0],[1,0]]},
+        {id:"b46",color:"blue",move:"A",row:8,col:6,cells:[[0,0],[0,1]]},
+        {id:"b47",color:"stone",move:"A",row:11,col:11,cells:[[0,0]]},
+        {id:"b48",color:"stone",move:"A",row:9,col:5,cells:[[0,0]]},
+        {id:"b49",color:"pink",move:"A",row:11,col:6,cells:[[0,0]]},
+        {id:"b50",color:"stone",move:"A",row:0,col:8,cells:[[0,0]]},
+        {id:"b51",color:"stone",move:"A",row:11,col:0,cells:[[0,0]]},
+        {id:"b52",color:"stone",move:"A",row:3,col:10,cells:[[0,0]]},
+        {id:"b53",color:"yellow",move:"A",row:7,col:10,cells:[[0,0]]},
+        {id:"b54",color:"orange",move:"A",row:0,col:10,cells:[[0,0],[0,1]]}
+      ],
+      gates:[{color:"teal",side:"bottom",index:8,span:3},{color:"yellow",side:"left",index:0,span:3},{color:"blue",side:"top",index:6,span:3},{color:"pink",side:"left",index:8,span:4},{color:"orange",side:"right",index:9,span:3},{color:"green",side:"right",index:1,span:3},{color:"purple",side:"bottom",index:2,span:3},{color:"red",side:"top",index:0,span:4}],
+      hint:"Elke vrije plek telt. Verspil er geen."
+    },
+    {
+      name:"Rommelzolder", par:120,
+      rows:12, cols:12,
+      walls:[[7,10],[9,7]],
+      blocks:[
+        {id:"b0",color:"pink",move:"A",row:3,col:3,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b1",color:"teal",move:"A",row:1,col:9,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b2",color:"orange",move:"A",row:5,col:2,cells:[[0,0],[0,1],[1,1],[2,1]]},
+        {id:"b3",color:"purple",move:"H",row:3,col:8,cells:[[0,0]]},
+        {id:"b4",color:"pink",move:"A",row:10,col:3,cells:[[0,0],[1,0]]},
+        {id:"b5",color:"teal",move:"V",row:0,col:9,cells:[[0,0]]},
+        {id:"b6",color:"orange",move:"V",row:7,col:4,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b7",color:"green",move:"A",row:10,col:9,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b8",color:"purple",move:"A",row:3,col:11,cells:[[0,0]]},
+        {id:"b9",color:"pink",move:"A",row:7,col:2,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b10",color:"green",move:"A",row:9,col:9,cells:[[0,1],[0,2],[1,0],[1,1]]},
+        {id:"b11",color:"blue",move:"A",row:6,col:9,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b12",color:"yellow",move:"A",row:2,col:0,cells:[[0,0]]},
+        {id:"b13",color:"pink",move:"A",row:11,col:8,cells:[[0,0]]},
+        {id:"b14",color:"teal",move:"A",row:1,col:8,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b15",color:"orange",move:"A",row:1,col:11,cells:[[0,0]]},
+        {id:"b16",color:"yellow",move:"H",row:0,col:0,cells:[[0,0],[1,0]]},
+        {id:"b17",color:"pink",move:"A",row:10,col:1,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b18",color:"orange",move:"A",row:7,col:0,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b19",color:"blue",move:"A",row:3,col:10,cells:[[0,0],[1,0],[1,1],[2,1]]},
+        {id:"b20",color:"purple",move:"H",row:1,col:7,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b21",color:"yellow",move:"H",row:2,col:2,cells:[[0,0]]},
+        {id:"b22",color:"red",move:"A",row:0,col:6,cells:[[0,0],[0,1],[0,2],[1,0]]},
+        {id:"b23",color:"pink",move:"A",row:4,col:7,cells:[[0,0],[0,1]]},
+        {id:"b24",color:"orange",move:"A",row:2,col:0,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b25",color:"purple",move:"H",row:2,col:4,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b26",color:"red",move:"V",row:6,col:4,cells:[[0,0],[0,1]]},
+        {id:"b27",color:"pink",move:"A",row:4,col:0,cells:[[0,0],[0,1]]},
+        {id:"b28",color:"orange",move:"V",row:10,col:4,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b29",color:"green",move:"A",row:7,col:5,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b30",color:"purple",move:"A",row:0,col:4,cells:[[0,0],[1,0],[2,0],[2,1]]},
+        {id:"b31",color:"yellow",move:"H",row:0,col:1,cells:[[0,2],[1,0],[1,1],[1,2]]},
+        {id:"b32",color:"red",move:"V",row:10,col:6,cells:[[0,0]]},
+        {id:"b33",color:"pink",move:"A",row:0,col:10,cells:[[0,0],[0,1]]},
+        {id:"b34",color:"teal",move:"A",row:5,col:7,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b35",color:"green",move:"A",row:10,col:6,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b36",color:"blue",move:"A",row:0,col:1,cells:[[0,0],[0,1]]},
+        {id:"b37",color:"stone",move:"A",row:5,col:1,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b38",color:"stone",move:"A",row:5,col:6,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b39",color:"teal",move:"A",row:4,col:5,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b40",color:"stone",move:"A",row:8,col:8,cells:[[0,0],[1,0]]},
+        {id:"b41",color:"orange",move:"A",row:7,col:7,cells:[[0,0],[0,1]]},
+        {id:"b42",color:"blue",move:"A",row:7,col:1,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b43",color:"purple",move:"A",row:10,col:8,cells:[[0,0]]},
+        {id:"b44",color:"yellow",move:"A",row:6,col:0,cells:[[0,0]]},
+        {id:"b45",color:"stone",move:"V",row:7,col:11,cells:[[0,0],[1,0]]},
+        {id:"b46",color:"red",move:"A",row:10,col:0,cells:[[0,0],[1,0]]},
+        {id:"b47",color:"stone",move:"A",row:9,col:5,cells:[[0,0],[0,1]]},
+        {id:"b48",color:"pink",move:"A",row:8,col:3,cells:[[0,0]]},
+        {id:"b49",color:"stone",move:"A",row:4,col:9,cells:[[0,0]]}
+      ],
+      gates:[{color:"yellow",side:"left",index:0,span:4},{color:"red",side:"top",index:4,span:4},{color:"pink",side:"left",index:6,span:3},{color:"teal",side:"top",index:9,span:3},{color:"orange",side:"bottom",index:3,span:4},{color:"green",side:"right",index:6,span:4},{color:"blue",side:"top",index:0,span:3},{color:"purple",side:"right",index:0,span:4}],
+      hint:"Veel kleine blokjes — begin bij de poort die het dichtst bij is."
+    },
+    {
+      name:"Kluwen", par:136,
+      rows:12, cols:12,
+      walls:[[9,9],[2,4],[2,5],[2,6]],
+      blocks:[
+        {id:"b0",color:"red",move:"A",row:6,col:11,cells:[[0,0],[1,0]]},
+        {id:"b1",color:"teal",move:"A",row:6,col:3,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b2",color:"yellow",move:"A",row:9,col:4,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b3",color:"pink",move:"A",row:0,col:4,cells:[[0,0],[1,0]]},
+        {id:"b4",color:"purple",move:"A",row:4,col:10,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b5",color:"orange",move:"A",row:10,col:9,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b6",color:"red",move:"A",row:11,col:8,cells:[[0,0]]},
+        {id:"b7",color:"teal",move:"A",row:8,col:0,cells:[[0,0]]},
+        {id:"b8",color:"yellow",move:"A",row:4,col:3,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b9",color:"purple",move:"A",row:5,col:9,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b10",color:"orange",move:"A",row:11,col:5,cells:[[0,0]]},
+        {id:"b11",color:"yellow",move:"A",row:5,col:0,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b12",color:"blue",move:"A",row:0,col:8,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b13",color:"pink",move:"A",row:8,col:5,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b14",color:"orange",move:"A",row:0,col:0,cells:[[0,0],[0,1]]},
+        {id:"b15",color:"red",move:"A",row:3,col:5,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b16",color:"teal",move:"A",row:9,col:0,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b17",color:"blue",move:"H",row:1,col:7,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b18",color:"purple",move:"V",row:10,col:2,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b19",color:"orange",move:"H",row:11,col:11,cells:[[0,0]]},
+        {id:"b20",color:"red",move:"A",row:8,col:8,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b21",color:"teal",move:"A",row:3,col:9,cells:[[0,0],[1,0]]},
+        {id:"b22",color:"yellow",move:"A",row:3,col:1,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b23",color:"blue",move:"H",row:2,col:9,cells:[[0,0],[0,1]]},
+        {id:"b24",color:"pink",move:"A",row:0,col:2,cells:[[0,0]]},
+        {id:"b25",color:"red",move:"V",row:7,col:7,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b26",color:"blue",move:"A",row:0,col:11,cells:[[0,0]]},
+        {id:"b27",color:"purple",move:"A",row:10,col:0,cells:[[0,0]]},
+        {id:"b28",color:"orange",move:"H",row:10,col:6,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b29",color:"red",move:"A",row:4,col:5,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b30",color:"pink",move:"A",row:0,col:5,cells:[[0,0],[1,0]]},
+        {id:"b31",color:"purple",move:"A",row:7,col:3,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b32",color:"orange",move:"A",row:7,col:10,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b33",color:"green",move:"A",row:4,col:7,cells:[[0,0],[1,0]]},
+        {id:"b34",color:"teal",move:"A",row:2,col:3,cells:[[0,0],[1,0]]},
+        {id:"b35",color:"blue",move:"H",row:1,col:11,cells:[[0,0],[1,0]]},
+        {id:"b36",color:"pink",move:"V",row:0,col:6,cells:[[0,0],[1,0]]},
+        {id:"b37",color:"orange",move:"A",row:1,col:2,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b38",color:"red",move:"A",row:11,col:6,cells:[[0,0],[0,1]]},
+        {id:"b39",color:"teal",move:"A",row:7,col:1,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b40",color:"yellow",move:"A",row:4,col:1,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b41",color:"purple",move:"A",row:1,col:0,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b42",color:"red",move:"A",row:7,col:4,cells:[[0,0],[0,1]]},
+        {id:"b43",color:"teal",move:"A",row:3,col:4,cells:[[0,0]]},
+        {id:"b44",color:"blue",move:"H",row:3,col:10,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b45",color:"stone",move:"H",row:6,col:6,cells:[[0,0],[1,0]]},
+        {id:"b46",color:"stone",move:"A",row:6,col:7,cells:[[0,0],[0,1]]},
+        {id:"b47",color:"stone",move:"A",row:1,col:7,cells:[[0,0]]},
+        {id:"b48",color:"stone",move:"A",row:3,col:0,cells:[[0,0],[1,0]]},
+        {id:"b49",color:"stone",move:"A",row:6,col:10,cells:[[0,0]]},
+        {id:"b50",color:"purple",move:"A",row:4,col:8,cells:[[0,0],[1,0]]},
+        {id:"b51",color:"orange",move:"A",row:11,col:0,cells:[[0,0]]},
+        {id:"b52",color:"green",move:"A",row:9,col:10,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b53",color:"orange",move:"A",row:1,col:10,cells:[[0,0]]},
+        {id:"b54",color:"stone",move:"H",row:5,col:4,cells:[[0,0]]},
+        {id:"b55",color:"red",move:"A",row:1,col:0,cells:[[0,0]]},
+        {id:"b56",color:"stone",move:"H",row:11,col:9,cells:[[0,0]]},
+        {id:"b57",color:"stone",move:"A",row:7,col:8,cells:[[0,0]]},
+        {id:"b58",color:"stone",move:"A",row:0,col:7,cells:[[0,0]]},
+        {id:"b59",color:"stone",move:"A",row:6,col:2,cells:[[0,0]]},
+        {id:"b60",color:"red",move:"A",row:3,col:7,cells:[[0,0]]}
+      ],
+      gates:[{color:"red",side:"bottom",index:7,span:2},{color:"teal",side:"left",index:8,span:2},{color:"yellow",side:"left",index:3,span:4},{color:"blue",side:"right",index:1,span:4},{color:"pink",side:"top",index:3,span:4},{color:"purple",side:"bottom",index:1,span:3},{color:"orange",side:"right",index:9,span:3},{color:"green",side:"top",index:8,span:3}],
+      hint:"Denk twee zetten vooruit voor je iets verschuift."
+    },
+    {
+      name:"Meesterproef", par:140,
+      rows:12, cols:12,
+      walls:[[9,5],[6,3],[6,4]],
+      blocks:[
+        {id:"b0",color:"green",move:"A",row:4,col:4,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b1",color:"blue",move:"A",row:8,col:1,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b2",color:"yellow",move:"A",row:4,col:0,cells:[[0,0],[1,0]]},
+        {id:"b3",color:"blue",move:"H",row:10,col:0,cells:[[0,0],[0,1]]},
+        {id:"b4",color:"yellow",move:"A",row:0,col:4,cells:[[0,0],[1,0]]},
+        {id:"b5",color:"teal",move:"A",row:8,col:8,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b6",color:"green",move:"A",row:4,col:10,cells:[[0,0],[0,1]]},
+        {id:"b7",color:"orange",move:"A",row:3,col:11,cells:[[0,0]]},
+        {id:"b8",color:"red",move:"A",row:10,col:2,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b9",color:"purple",move:"A",row:0,col:1,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b10",color:"yellow",move:"A",row:7,col:7,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b11",color:"teal",move:"A",row:4,col:2,cells:[[0,0],[1,0]]},
+        {id:"b12",color:"blue",move:"H",row:10,col:4,cells:[[0,0],[1,0]]},
+        {id:"b13",color:"yellow",move:"A",row:0,col:10,cells:[[0,0]]},
+        {id:"b14",color:"pink",move:"A",row:0,col:6,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b15",color:"teal",move:"A",row:2,col:6,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b16",color:"green",move:"A",row:1,col:6,cells:[[0,0],[1,0]]},
+        {id:"b17",color:"orange",move:"V",row:5,col:4,cells:[[0,0]]},
+        {id:"b18",color:"red",move:"A",row:5,col:1,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b19",color:"blue",move:"H",row:11,col:0,cells:[[0,0],[0,1]]},
+        {id:"b20",color:"purple",move:"A",row:9,col:6,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b21",color:"yellow",move:"A",row:10,col:9,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b22",color:"pink",move:"A",row:0,col:3,cells:[[0,0],[1,0]]},
+        {id:"b23",color:"green",move:"A",row:1,col:8,cells:[[0,0],[1,0]]},
+        {id:"b24",color:"orange",move:"A",row:7,col:10,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b25",color:"red",move:"A",row:8,col:3,cells:[[0,0],[1,0]]},
+        {id:"b26",color:"yellow",move:"A",row:2,col:1,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b27",color:"teal",move:"H",row:0,col:10,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b28",color:"green",move:"A",row:6,col:8,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b29",color:"orange",move:"A",row:3,col:3,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b30",color:"red",move:"V",row:7,col:3,cells:[[0,0]]},
+        {id:"b31",color:"blue",move:"A",row:8,col:4,cells:[[0,0],[0,1]]},
+        {id:"b32",color:"purple",move:"A",row:10,col:7,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b33",color:"yellow",move:"A",row:10,col:5,cells:[[0,0]]},
+        {id:"b34",color:"pink",move:"H",row:5,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b35",color:"teal",move:"A",row:1,col:0,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b36",color:"green",move:"V",row:1,col:9,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b37",color:"orange",move:"V",row:0,col:5,cells:[[0,0],[1,0]]},
+        {id:"b38",color:"red",move:"V",row:7,col:4,cells:[[0,0]]},
+        {id:"b39",color:"purple",move:"A",row:3,col:2,cells:[[0,0]]},
+        {id:"b40",color:"yellow",move:"H",row:6,col:0,cells:[[0,0]]},
+        {id:"b41",color:"pink",move:"A",row:4,col:8,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b42",color:"teal",move:"A",row:0,col:0,cells:[[0,0],[0,1]]},
+        {id:"b43",color:"green",move:"A",row:0,col:8,cells:[[0,0]]},
+        {id:"b44",color:"orange",move:"V",row:3,col:5,cells:[[0,0]]},
+        {id:"b45",color:"blue",move:"A",row:7,col:5,cells:[[0,0],[0,1]]},
+        {id:"b46",color:"yellow",move:"A",row:3,col:10,cells:[[0,0]]},
+        {id:"b47",color:"teal",move:"A",row:8,col:0,cells:[[0,0],[1,0]]},
+        {id:"b48",color:"green",move:"A",row:0,col:9,cells:[[0,0]]},
+        {id:"b49",color:"orange",move:"A",row:4,col:7,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b50",color:"purple",move:"V",row:8,col:6,cells:[[0,0]]},
+        {id:"b51",color:"yellow",move:"H",row:7,col:0,cells:[[0,0]]},
+        {id:"b52",color:"stone",move:"A",row:6,col:5,cells:[[0,0],[0,1]]},
+        {id:"b53",color:"stone",move:"A",row:6,col:7,cells:[[0,0]]},
+        {id:"b54",color:"red",move:"A",row:3,col:4,cells:[[0,0]]},
+        {id:"b55",color:"green",move:"V",row:7,col:8,cells:[[0,0],[0,1]]},
+        {id:"b56",color:"pink",move:"A",row:2,col:2,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b57",color:"stone",move:"A",row:9,col:2,cells:[[0,0],[1,0]]},
+        {id:"b58",color:"red",move:"A",row:10,col:9,cells:[[0,0]]},
+        {id:"b59",color:"stone",move:"A",row:7,col:2,cells:[[0,0]]},
+        {id:"b60",color:"stone",move:"A",row:9,col:11,cells:[[0,0],[1,0]]},
+        {id:"b61",color:"stone",move:"H",row:5,col:5,cells:[[0,0]]},
+        {id:"b62",color:"stone",move:"A",row:9,col:4,cells:[[0,0]]},
+        {id:"b63",color:"orange",move:"A",row:2,col:5,cells:[[0,0]]}
+      ],
+      gates:[{color:"green",side:"top",index:7,span:3},{color:"orange",side:"top",index:4,span:2},{color:"red",side:"bottom",index:2,span:3},{color:"blue",side:"left",index:10,span:2},{color:"purple",side:"bottom",index:6,span:4},{color:"yellow",side:"left",index:4,span:4},{color:"pink",side:"right",index:5,span:3},{color:"teal",side:"left",index:0,span:3}],
+      hint:"Meer dan honderd zetten. Rustig ademhalen."
+    },
+    {
+      name:"De Kleurjam", par:144,
+      rows:12, cols:12,
+      walls:[[9,3],[3,10],[4,10],[5,10]],
+      blocks:[
+        {id:"b0",color:"yellow",move:"V",row:1,col:1,cells:[[0,0],[0,1]]},
+        {id:"b1",color:"teal",move:"A",row:3,col:11,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b2",color:"green",move:"A",row:5,col:3,cells:[[0,0],[1,0]]},
+        {id:"b3",color:"red",move:"A",row:6,col:0,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b4",color:"yellow",move:"A",row:0,col:5,cells:[[0,1],[1,0],[1,1]]},
+        {id:"b5",color:"orange",move:"V",row:10,col:4,cells:[[0,0],[0,1],[1,1]]},
+        {id:"b6",color:"purple",move:"H",row:10,col:7,cells:[[0,0],[1,0]]},
+        {id:"b7",color:"blue",move:"A",row:11,col:0,cells:[[0,0],[0,1]]},
+        {id:"b8",color:"teal",move:"A",row:0,col:1,cells:[[0,0]]},
+        {id:"b9",color:"green",move:"H",row:1,col:0,cells:[[0,0],[1,0],[2,0]]},
+        {id:"b10",color:"yellow",move:"A",row:9,col:8,cells:[[0,0],[0,1]]},
+        {id:"b11",color:"blue",move:"A",row:5,col:0,cells:[[0,0],[0,1],[0,2]]},
+        {id:"b12",color:"green",move:"A",row:1,col:10,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b13",color:"yellow",move:"V",row:0,col:2,cells:[[0,0]]},
+        {id:"b14",color:"orange",move:"A",row:10,col:6,cells:[[0,0]]},
+        {id:"b15",color:"purple",move:"A",row:3,col:5,cells:[[0,0],[0,1],[1,0]]},
+        {id:"b16",color:"blue",move:"A",row:1,col:7,cells:[[0,0],[0,1]]},
+        {id:"b17",color:"teal",move:"A",row:9,col:6,cells:[[0,0],[0,1]]},
+        {id:"b18",color:"green",move:"A",row:0,col:0,cells:[[0,0]]},
+        {id:"b19",color:"red",move:"V",row:9,col:10,cells:[[0,0]]},
+        {id:"b20",color:"yellow",move:"V",row:2,col:1,cells:[[0,0],[0,1]]},
+        {id:"b21",color:"purple",move:"H",row:10,col:1,cells:[[0,0],[0,1]]},
+        {id:"b22",color:"blue",move:"A",row:3,col:1,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b23",color:"teal",move:"A",row:5,col:8,cells:[[0,1],[1,0],[1,1],[1,2]]},
+        {id:"b24",color:"red",move:"A",row:10,col:10,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b25",color:"yellow",move:"A",row:8,col:10,cells:[[0,0],[0,1]]},
+        {id:"b26",color:"blue",move:"A",row:5,col:5,cells:[[0,0],[1,0],[1,1],[2,0]]},
+        {id:"b27",color:"teal",move:"H",row:8,col:4,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b28",color:"green",move:"A",row:0,col:3,cells:[[0,0],[0,1]]},
+        {id:"b29",color:"red",move:"A",row:7,col:11,cells:[[0,0]]},
+        {id:"b30",color:"yellow",move:"V",row:6,col:4,cells:[[0,0]]},
+        {id:"b31",color:"teal",move:"A",row:6,col:7,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b32",color:"red",move:"A",row:7,col:10,cells:[[0,0]]},
+        {id:"b33",color:"yellow",move:"A",row:3,col:3,cells:[[0,1],[1,0],[1,1],[2,1]]},
+        {id:"b34",color:"orange",move:"V",row:11,col:4,cells:[[0,0]]},
+        {id:"b35",color:"pink",move:"A",row:7,col:9,cells:[[0,0],[1,0]]},
+        {id:"b36",color:"teal",move:"H",row:11,col:8,cells:[[0,0],[0,1]]},
+        {id:"b37",color:"green",move:"H",row:0,col:8,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b38",color:"yellow",move:"A",row:2,col:7,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b39",color:"orange",move:"V",row:7,col:6,cells:[[0,0],[1,0],[1,1]]},
+        {id:"b40",color:"purple",move:"H",row:8,col:1,cells:[[0,0],[0,1],[1,0],[1,1]]},
+        {id:"b41",color:"green",move:"A",row:7,col:3,cells:[[0,0],[1,0]]},
+        {id:"b42",color:"red",move:"A",row:10,col:8,cells:[[0,0],[0,1]]},
+        {id:"b43",color:"yellow",move:"A",row:4,col:7,cells:[[0,0],[0,1],[0,2],[1,1]]},
+        {id:"b44",color:"orange",move:"A",row:11,col:6,cells:[[0,0]]},
+        {id:"b45",color:"purple",move:"A",row:7,col:0,cells:[[0,0],[1,0]]},
+        {id:"b46",color:"blue",move:"A",row:9,col:0,cells:[[0,0],[1,0]]},
+        {id:"b47",color:"stone",move:"H",row:2,col:4,cells:[[0,0],[0,1]]},
+        {id:"b48",color:"stone",move:"V",row:4,col:6,cells:[[0,0],[1,0]]},
+        {id:"b49",color:"purple",move:"H",row:11,col:3,cells:[[0,0]]},
+        {id:"b50",color:"red",move:"A",row:0,col:7,cells:[[0,0]]},
+        {id:"b51",color:"blue",move:"A",row:4,col:0,cells:[[0,0],[0,1]]},
+        {id:"b52",color:"stone",move:"A",row:3,col:9,cells:[[0,0]]},
+        {id:"b53",color:"red",move:"A",row:2,col:3,cells:[[0,0]]},
+        {id:"b54",color:"orange",move:"A",row:7,col:2,cells:[[0,0]]},
+        {id:"b55",color:"green",move:"A",row:3,col:7,cells:[[0,0]]},
+        {id:"b56",color:"pink",move:"A",row:1,col:3,cells:[[0,0]]},
+        {id:"b57",color:"green",move:"A",row:11,col:2,cells:[[0,0]]},
+        {id:"b58",color:"orange",move:"A",row:2,col:6,cells:[[0,0]]},
+        {id:"b59",color:"red",move:"A",row:5,col:7,cells:[[0,0]]},
+        {id:"b60",color:"yellow",move:"A",row:8,col:8,cells:[[0,0]]},
+        {id:"b61",color:"purple",move:"A",row:7,col:4,cells:[[0,0]]}
+      ],
+      gates:[{color:"yellow",side:"top",index:1,span:4},{color:"orange",side:"bottom",index:4,span:4},{color:"pink",side:"right",index:3,span:2},{color:"purple",side:"left",index:8,span:4},{color:"blue",side:"top",index:6,span:4},{color:"teal",side:"right",index:8,span:4},{color:"green",side:"left",index:0,span:4},{color:"red",side:"bottom",index:9,span:3}],
+      hint:"Het diepste punt van het bord. Veel succes."
+    }
+  ];
+
+
+  const SIDE_DIR = {top:[-1,0], bottom:[1,0], left:[0,-1], right:[0,1]};
+  const SIDE_AXIS = {top:"V", bottom:"V", left:"H", right:"H"};
+
+  let cellSize = 60;
+  let ROWS = 6, COLS = 6;
+  let blocks = [], gates = [], wallSet = new Set();
+  let currentLevel = 0;
+  let moveCount = 0;
+  let history = [];
+  let progress = {solved:[], best:{}};
+  let winShown = false;
+
+  const boardEl      = document.getElementById("board");
+  const cellsLayer   = document.getElementById("cells-layer");
+  const gatesLayer   = document.getElementById("gates-layer");
+  const blocksLayer  = document.getElementById("blocks-layer");
+  const boardWrap    = document.getElementById("board-wrap");
+  const movesCountEl = document.getElementById("moves-count");
+  const leftCountEl  = document.getElementById("left-count");
+  const lvlNumEl     = document.getElementById("lvl-num");
+  const lvlNameEl    = document.getElementById("lvl-name");
+  const lvlMetaEl    = document.getElementById("lvl-meta");
+  const hintEl       = document.getElementById("hint");
+  const levelsEl     = document.getElementById("levels");
+  const progressEl   = document.getElementById("levels-progress");
+  const undoBtn      = document.getElementById("undo-btn");
+  const winModal     = document.getElementById("win-modal");
+  const winSub       = document.getElementById("win-sub");
+  const winTitle     = document.getElementById("win-title");
+  const winEmoji     = document.getElementById("win-emoji");
+
+  /* ---------- rules engine (identical to the offline solver) ---------- */
+
+  const key = (r,c) => r + "," + c;
+
+  function cellsAt(b, row, col){
+    const out = [];
+    for(const rc of b.cells) out.push([row + rc[0], col + rc[1]]);
+    return out;
+  }
+
+  function occupancy(excludeId){
+    const s = new Set();
+    for(const b of blocks){
+      if(b.exited || b.id === excludeId) continue;
+      for(const rc of cellsAt(b, b.row, b.col)) s.add(key(rc[0], rc[1]));
+    }
+    return s;
+  }
+
+  function fitsInside(b, row, col, occ){
+    for(const rc of cellsAt(b, row, col)){
+      const r = rc[0], c = rc[1];
+      if(r < 0 || c < 0 || r >= ROWS || c >= COLS) return false;
+      if(wallSet.has(key(r,c))) return false;
+      if(occ.has(key(r,c))) return false;
+    }
+    return true;
+  }
+
+  function gateOf(color){ return gates.find(g => g.color === color); }
+
+  function outsideOk(r, c, gate){
+    const lo = gate.index, hi = gate.index + gate.span - 1;
+    if(gate.side === "right")  return c >= COLS && r >= lo && r <= hi && r >= 0 && r < ROWS;
+    if(gate.side === "left")   return c < 0     && r >= lo && r <= hi && r >= 0 && r < ROWS;
+    if(gate.side === "bottom") return r >= ROWS && c >= lo && c <= hi && c >= 0 && c < COLS;
+    if(gate.side === "top")    return r < 0     && c >= lo && c <= hi && c >= 0 && c < COLS;
+    return false;
+  }
+
+  // number of steps needed to leave the board completely, or -1
+  function exitSteps(b, row, col, occ){
+    const gate = gateOf(b.color);
+    if(!gate) return -1;
+    if(b.move !== "A" && b.move !== SIDE_AXIS[gate.side]) return -1;
+    const d = SIDE_DIR[gate.side];
+    for(let k = 1; k <= ROWS + COLS + 4; k++){
+      let allOut = true;
+      for(const rc of b.cells){
+        const r = row + d[0]*k + rc[0];
+        const c = col + d[1]*k + rc[1];
+        const inside = r >= 0 && r < ROWS && c >= 0 && c < COLS;
+        if(inside){
+          allOut = false;
+          if(wallSet.has(key(r,c)) || occ.has(key(r,c))) return -1;
+        } else if(!outsideOk(r, c, gate)){
+          return -1;
+        }
+      }
+      if(allOut) return k;
+    }
+    return -1;
+  }
+
+  // how far a block may travel along one axis, and whether it can leave
+  function dragRange(b, axis, occ){
+    let neg = 0, pos = 0;
+    while(fitsInside(b, axis === "V" ? b.row - (neg+1) : b.row,
+                        axis === "H" ? b.col - (neg+1) : b.col, occ)) neg++;
+    while(fitsInside(b, axis === "V" ? b.row + (pos+1) : b.row,
+                        axis === "H" ? b.col + (pos+1) : b.col, occ)) pos++;
+
+    let exitSide = null, exitOffset = 0;
+    const gate = gateOf(b.color);
+    if(gate && SIDE_AXIS[gate.side] === axis){
+      const k = exitSteps(b, b.row, b.col, occ);
+      if(k > 0){
+        exitOffset = k;
+        exitSide = (gate.side === "right" || gate.side === "bottom") ? "pos" : "neg";
+      }
+    }
+    return {neg, pos, exitSide, exitOffset};
+  }
+
+  /* ---------- rendering ---------- */
+
+  function computeCellSize(){
+    const w = boardWrap.clientWidth;
+    const raw = Math.floor((w - 2*FRAME) / COLS);
+    const size = Math.max(16, Math.min(78, raw));
+    GAP = Math.max(2, Math.round(size * 0.10));
+    RAD = Math.max(4, Math.round(size * 0.20));
+    return size;
+  }
+
+  function gripFor(b){
+    const grip = document.createElement("div");
+    const kind = b.move === "A" ? "free" : (b.move === "H" ? "horiz" : "vert");
+    grip.className = "grip " + kind;
+    const names = kind === "free" ? ["n","s","e","w","c"] : ["a","c","b"];
+    for(const n of names){
+      const d = document.createElement("div");
+      d.className = "dot " + n;
+      grip.appendChild(d);
+    }
+    return grip;
+  }
+
+  function buildBlockEl(b){
+    const el = document.createElement("div");
+    el.className = "block";
+    el.setAttribute("role","button");
+    el.setAttribute("tabindex","0");
+    const set = new Set(b.cells.map(rc => rc[0] + "," + rc[1]));
+    let maxR = 0, maxC = 0, sumR = 0, sumC = 0;
+    for(const rc of b.cells){
+      maxR = Math.max(maxR, rc[0]); maxC = Math.max(maxC, rc[1]);
+      sumR += rc[0]; sumC += rc[1];
+    }
+    const bw = (maxC+1)*cellSize, bh = (maxR+1)*cellSize;
+    el.style.width = bw + "px";
+    el.style.height = bh + "px";
+
+    for(const rc of b.cells){
+      const dr = rc[0], dc = rc[1];
+      const up    = set.has((dr-1) + "," + dc);
+      const down  = set.has((dr+1) + "," + dc);
+      const left  = set.has(dr + "," + (dc-1));
+      const right = set.has(dr + "," + (dc+1));
+      const cell = document.createElement("div");
+      cell.className = "bcell c-" + b.color;
+      cell.style.left   = (dc*cellSize + GAP/2) + "px";
+      cell.style.top    = (dr*cellSize + GAP/2) + "px";
+      cell.style.width  = (cellSize - GAP + (right ? GAP : 0)) + "px";
+      cell.style.height = (cellSize - GAP + (down  ? GAP : 0)) + "px";
+      // one continuous gradient across the whole block
+      cell.style.backgroundSize = bw + "px " + bh + "px";
+      cell.style.backgroundPosition = (-dc*cellSize) + "px " + (-dr*cellSize) + "px";
+      cell.style.borderTopLeftRadius     = (!up && !left)    ? RAD+"px" : "0";
+      cell.style.borderTopRightRadius    = (!up && !right)   ? RAD+"px" : "0";
+      cell.style.borderBottomLeftRadius  = (!down && !left)  ? RAD+"px" : "0";
+      cell.style.borderBottomRightRadius = (!down && !right) ? RAD+"px" : "0";
+      const sh = [];
+      if(!up)   sh.push("inset 0 2px 0 rgba(255,255,255,.45)");
+      if(!down) sh.push("inset 0 -5px 9px rgba(0,0,0,.22)");
+      if(!left) sh.push("inset 2px 0 0 rgba(255,255,255,.15)");
+      cell.style.boxShadow = sh.join(",");
+      el.appendChild(cell);
+    }
+
+    // grip on the cell closest to the shape's centre of mass
+    const cr = sumR / b.cells.length, cc = sumC / b.cells.length;
+    let bestCell = b.cells[0], bestD = Infinity;
+    for(const rc of b.cells){
+      const d = (rc[0]-cr)*(rc[0]-cr) + (rc[1]-cc)*(rc[1]-cc);
+      if(d < bestD){ bestD = d; bestCell = rc; }
+    }
+    if(b.cells.length === 1) return el;
+    const grip = gripFor(b);
+    grip.style.left = (bestCell[1]*cellSize) + "px";
+    grip.style.top  = (bestCell[0]*cellSize) + "px";
+    grip.style.width = cellSize + "px";
+    grip.style.height = cellSize + "px";
+    el.appendChild(grip);
+    return el;
+  }
+
+  function placeBlockEl(b){
+    b.el.style.left = (b.col * cellSize) + "px";
+    b.el.style.top  = (b.row * cellSize) + "px";
+  }
+
+  function buildBoard(){
+    cellSize = computeCellSize();
+    boardEl.style.width  = (COLS*cellSize + 2*FRAME) + "px";
+    boardEl.style.height = (ROWS*cellSize + 2*FRAME) + "px";
+
+    cellsLayer.style.left = FRAME + "px";
+    cellsLayer.style.top  = FRAME + "px";
+    cellsLayer.style.width  = (COLS*cellSize) + "px";
+    cellsLayer.style.height = (ROWS*cellSize) + "px";
+    cellsLayer.style.gridTemplateColumns = "repeat(" + COLS + ", 1fr)";
+    cellsLayer.style.gridTemplateRows = "repeat(" + ROWS + ", 1fr)";
+    boardEl.style.setProperty("--cell-gap", Math.max(1, Math.round(cellSize*0.055)) + "px");
+    boardEl.style.setProperty("--cell-rad", Math.max(3, Math.round(cellSize*0.17)) + "px");
+    boardEl.style.setProperty("--dot", Math.max(3, Math.round(cellSize*0.085)) + "px");
+    boardEl.style.setProperty("--reach", Math.max(5, Math.round(cellSize*0.135)) + "px");
+    cellsLayer.innerHTML = "";
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const cell = document.createElement("div");
+        cell.className = "cell" + (wallSet.has(key(r,c)) ? " wall" : "");
+        cellsLayer.appendChild(cell);
+      }
+    }
+
+    blocksLayer.style.left = FRAME + "px";
+    blocksLayer.style.top  = FRAME + "px";
+    blocksLayer.style.width  = (COLS*cellSize) + "px";
+    blocksLayer.style.height = (ROWS*cellSize) + "px";
+
+    gatesLayer.innerHTML = "";
+    const thin = Math.round(cellSize * 0.30);
+    gates.forEach(g => {
+      const el = document.createElement("div");
+      el.className = "gate c-" + g.color;
+      const long = g.span*cellSize - thin;
+      const off  = FRAME + g.index*cellSize + thin/2;
+      if(g.side === "left" || g.side === "right"){
+        el.style.top = off + "px";
+        el.style.height = long + "px";
+        el.style.width = (FRAME-2) + "px";
+        if(g.side === "left"){ el.style.left = "1px";  el.style.borderRadius = "0 8px 8px 0"; }
+        else                 { el.style.right = "1px"; el.style.borderRadius = "8px 0 0 8px"; }
+      } else {
+        el.style.left = off + "px";
+        el.style.width = long + "px";
+        el.style.height = (FRAME-2) + "px";
+        if(g.side === "top"){ el.style.top = "1px";    el.style.borderRadius = "0 0 8px 8px"; }
+        else                { el.style.bottom = "1px"; el.style.borderRadius = "8px 8px 0 0"; }
+      }
+      gatesLayer.appendChild(el);
+    });
+
+    blocksLayer.innerHTML = "";
+    blocks.forEach(b => {
+      const el = buildBlockEl(b);
+      b.el = el;
+      placeBlockEl(b);
+      if(b.exited){ el.classList.add("exited"); el.style.opacity = "0"; }
+      attachDrag(b);
+      blocksLayer.appendChild(el);
+    });
+  }
+
+  /* ---------- dragging ---------- */
+
+  function attachDrag(block){
+    block.el.addEventListener("pointerdown", e => onDown(e, block));
+    block.el.addEventListener("pointermove", e => onMove(e, block));
+    block.el.addEventListener("pointerup",   e => onUp(e, block));
+    block.el.addEventListener("pointercancel", e => onUp(e, block));
+  }
+
+  function onDown(e, b){
+    if(b.exited || winShown) return;
+    e.preventDefault();
+    b.drag = {
+      x:e.clientX, y:e.clientY,
+      row:b.row, col:b.col,
+      axis: b.move === "A" ? null : b.move,
+      range:null, raw:0
+    };
+    b.occ = occupancy(b.id);
+    if(b.drag.axis) b.drag.range = dragRange(b, b.drag.axis, b.occ);
+    b.el.classList.add("dragging");
+    try{ b.el.setPointerCapture(e.pointerId); }catch(err){}
+  }
+
+  function onMove(e, b){
+    if(!b.drag) return;
+    const dx = e.clientX - b.drag.x;
+    const dy = e.clientY - b.drag.y;
+    if(!b.drag.axis){
+      if(Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      b.drag.axis = Math.abs(dx) > Math.abs(dy) ? "H" : "V";
+      b.drag.range = dragRange(b, b.drag.axis, b.occ);
+    }
+    const rg = b.drag.range;
+    const lo = rg.exitSide === "neg" ? -rg.exitOffset : -rg.neg;
+    const hi = rg.exitSide === "pos" ?  rg.exitOffset :  rg.pos;
+    let raw = (b.drag.axis === "H" ? dx : dy) / cellSize;
+    raw = Math.max(lo, Math.min(hi, raw));
+    b.drag.raw = raw;
+    if(b.drag.axis === "H") b.el.style.left = ((b.drag.col + raw) * cellSize) + "px";
+    else                    b.el.style.top  = ((b.drag.row + raw) * cellSize) + "px";
+  }
+
+  function onUp(e, b){
+    if(!b.drag) return;
+    const drag = b.drag;
+    b.drag = null;
+    b.el.classList.remove("dragging");
+    if(!drag.axis || !drag.range){ placeBlockEl(b); return; }
+
+    const rg = drag.range, raw = drag.raw;
+    let offset = null, leaving = false;
+
+    if(rg.exitSide === "pos" && raw > rg.pos + 0.5){ offset = rg.exitOffset; leaving = true; }
+    else if(rg.exitSide === "neg" && raw < -rg.neg - 0.5){ offset = -rg.exitOffset; leaving = true; }
+    else offset = Math.max(-rg.neg, Math.min(rg.pos, Math.round(raw)));
+
+    if(offset === 0 && !leaving){ placeBlockEl(b); return; }
+
+    pushHistory();
+    if(drag.axis === "H") b.col = drag.col + offset;
+    else                  b.row = drag.row + offset;
+
+    moveCount++;
+    movesCountEl.textContent = moveCount;
+    undoBtn.disabled = false;
+
+    requestAnimationFrame(() => {
+      placeBlockEl(b);
+      if(leaving){
+        b.exited = true;
+        b.el.classList.add("exited");
+        updateLeftCount();
+        setTimeout(() => { b.el.style.opacity = "0"; }, 200);
+      }
+    });
+
+    if(leaving) setTimeout(checkWin, 360);
+  }
+
+  /* ---------- history ---------- */
+
+  function pushHistory(){
+    history.push({
+      moves: moveCount,
+      state: blocks.map(b => ({row:b.row, col:b.col, exited:b.exited}))
+    });
+    if(history.length > 200) history.shift();
+  }
+
+  function undo(){
+    const snap = history.pop();
+    if(!snap) return;
+    moveCount = snap.moves;
+    movesCountEl.textContent = moveCount;
+    blocks.forEach((b, i) => {
+      const s = snap.state[i];
+      b.row = s.row; b.col = s.col;
+      const wasOut = b.exited;
+      b.exited = s.exited;
+      if(wasOut && !b.exited){
+        b.el.classList.remove("exited");
+        b.el.style.opacity = "1";
+      }
+      placeBlockEl(b);
+    });
+    updateLeftCount();
+    undoBtn.disabled = history.length === 0;
+  }
+
+  /* ---------- win ---------- */
+
+  function updateLeftCount(){
+    let left = 0;
+    for(const b of blocks) if(gateOf(b.color) && !b.exited) left++;
+    leftCountEl.textContent = left;
+  }
+
+  function checkWin(){
+    if(winShown) return;
+    if(!blocks.every(b => !gateOf(b.color) || b.exited)) return;
+    winShown = true;
+    const par = LEVELS[currentLevel].par;
+    const prevBest = progress.best[currentLevel];
+    markSolved(currentLevel, moveCount);
+    const extra = (prevBest !== undefined && moveCount < prevBest) ? " Nieuw record!" : "";
+    if(moveCount <= par){
+      winEmoji.textContent = "🏅";
+      winTitle.textContent = "Meesterlijk!";
+      winSub.textContent = "In " + moveCount + " zetten — het doel was " + par + "." + extra;
+    } else {
+      winEmoji.textContent = "🎉";
+      winTitle.textContent = "Level gehaald!";
+      winSub.textContent = "Opgelost in " + moveCount + " zetten. Ons doel: " + par + "." + extra;
+    }
+    winModal.classList.add("show");
+    launchConfetti();
+  }
+
+  function launchConfetti(){
+    const colors = ["#F94144","#F3722C","#F9C74F","#43AA8B","#22B8CF","#277DA1","#9D4EDD","#F72585"];
+    const card = winModal.querySelector(".win-card");
+    for(let i=0;i<26;i++){
+      const p = document.createElement("div");
+      p.className = "confetti";
+      p.style.left = (Math.random()*100) + "%";
+      p.style.background = colors[i % colors.length];
+      p.style.animationDuration = (1.4 + Math.random()*1.1) + "s";
+      p.style.animationDelay = (Math.random()*0.3) + "s";
+      card.appendChild(p);
+      setTimeout(() => p.remove(), 3000);
+    }
+  }
+
+  /* ---------- levels ---------- */
+
+  function loadLevel(idx){
+    currentLevel = idx;
+    winShown = false;
+    moveCount = 0;
+    history = [];
+    undoBtn.disabled = true;
+    movesCountEl.textContent = "0";
+    winModal.classList.remove("show");
+
+    const lvl = LEVELS[idx];
+    ROWS = lvl.rows; COLS = lvl.cols;
+    wallSet = new Set(lvl.walls.map(w => key(w[0], w[1])));
+    blocks = lvl.blocks.map(b => ({
+      id:b.id, color:b.color, move:b.move,
+      cells:b.cells, row:b.row, col:b.col, exited:false
+    }));
+    gates = lvl.gates.slice();
+
+    lvlNumEl.textContent = (idx+1);
+    lvlNameEl.textContent = lvl.name;
+    const best = progress.best[idx];
+    lvlMetaEl.textContent = "doel: " + lvl.par + " zetten" + (best !== undefined ? " · jouw best: " + best : "");
+    hintEl.textContent = lvl.hint || "";
+
+    buildBoard();
+    updateLeftCount();
+    renderLevelTiles();
+  }
+
+  function markSolved(idx, moves){
+    if(!progress.solved.includes(idx)) progress.solved.push(idx);
+    if(progress.best[idx] === undefined || moves < progress.best[idx]) progress.best[idx] = moves;
+    saveProgress();
+    const best = progress.best[idx];
+    lvlMetaEl.textContent = "doel: " + LEVELS[idx].par + " zetten · jouw best: " + best;
+    renderLevelTiles();
+  }
+
+  function renderLevelTiles(){
+    levelsEl.innerHTML = "";
+    LEVELS.forEach((lvl, i) => {
+      const solved = progress.solved.includes(i);
+      const best = progress.best[i];
+      const perfect = solved && best <= lvl.par;
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "lvl-tile" + (i === currentLevel ? " active" : "")
+                     + (solved ? " solved" : "") + (perfect ? " perfect" : "");
+      tile.title = lvl.name + " — doel: " + lvl.par + " zetten";
+      tile.setAttribute("aria-label", "Level " + (i+1) + ": " + lvl.name);
+      const n = document.createElement("div");
+      n.className = "n";
+      n.textContent = (i+1);
+      const p = document.createElement("div");
+      p.className = "p";
+      p.textContent = solved ? (perfect ? "★ " + best : best + "/" + lvl.par) : lvl.par + " zet";
+      tile.appendChild(n); tile.appendChild(p);
+      tile.addEventListener("click", () => loadLevel(i));
+      levelsEl.appendChild(tile);
+    });
+    progressEl.textContent = progress.solved.length + "/" + LEVELS.length + " gehaald";
+  }
+
+  /* ---------- storage ---------- */
+
+  async function loadProgress(){
+    try{
+      if(window.storage){
+        const res = await window.storage.get("kleurjam-progress", false);
+        if(res && res.value){
+          const parsed = JSON.parse(res.value);
+          if(parsed && Array.isArray(parsed.solved)) progress = parsed;
+        }
+      }
+    }catch(err){ /* nog niets opgeslagen */ }
+  }
+
+  async function saveProgress(){
+    try{
+      if(window.storage) await window.storage.set("kleurjam-progress", JSON.stringify(progress), false);
+    }catch(err){ /* best effort */ }
+  }
+
+  /* ---------- wiring ---------- */
+
+  document.getElementById("restart-btn").addEventListener("click", () => loadLevel(currentLevel));
+  document.getElementById("undo-btn").addEventListener("click", undo);
+  document.getElementById("replay-btn").addEventListener("click", () => loadLevel(currentLevel));
+  document.getElementById("next-level-btn").addEventListener("click", () => {
+    loadLevel(Math.min(currentLevel + 1, LEVELS.length - 1));
+  });
+  document.addEventListener("keydown", e => {
+    if((e.key === "z" || e.key === "Z") && !winShown) undo();
+    if(e.key === "r" || e.key === "R") loadLevel(currentLevel);
+  });
+
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(buildBoard, 120);
+  });
+
+  (async function init(){
+    await loadProgress();
+    loadLevel(0);
+  })();
+})();
+</script>
+</body>
+</html>
