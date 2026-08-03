@@ -109,6 +109,19 @@ node --max-old-space-size=3000 playsolve.js play.html 0,1,2,3,4
 Vraagt Playwright. In dit project staat Chromium al klaar; los daarvan is
 `npm i playwright` genoeg.
 
+## Zelf spelen / publiceren
+
+`kleurjam.html` is één los bestand: openen in een browser is genoeg, ook zonder
+webserver. Wil je het als webpagina delen, dan maakt `artifact.js` er een versie
+van zonder verwijzingen naar buiten:
+
+```sh
+node artifact.js ../../kleurjam.html kleurjam-artifact.html
+```
+
+Die versie mist alleen de webfonts (die zijn in zo'n pagina geblokkeerd) en valt
+terug op afgeronde systeemletters.
+
 ## Bestanden
 
 | bestand | rol |
@@ -126,6 +139,7 @@ Vraagt Playwright. In dit project staat Chromium al klaar; los daarvan is
 | `reorder.js` | levels op par sorteren |
 | `finalcheck.js` | controle van het uiteindelijke bestand |
 | `playsolve.js` | oplossingen naspelen in een echte browser |
+| `artifact.js` | pagina-versie zonder externe verzoeken |
 
 ## Als je de spelregels aanpast
 
