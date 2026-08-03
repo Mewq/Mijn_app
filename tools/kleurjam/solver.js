@@ -48,6 +48,11 @@ function heuristic(L, st, occ){
 /* one phase: from `st`, find a move sequence ending with an exit */
 function phase(L, st, opts){
   const cap = opts.cap || 120000;
+  // Niet het aantal uitgeklapte knopen maar het aantal bewaarde toestanden
+  // bepaalt het geheugengebruik: met ~150 opvolgers per knoop loopt dat anders
+  // hard op. Boven deze grens zoeken we verder met wat er al in de wachtrij zit.
+  const maxOpen = opts.maxOpen || 250000;
+  let pushed = 0;
   const W = opts.weight || 2.2;
   const rnd = opts.rnd || Math.random;
   const seen = new Map();
@@ -77,6 +82,8 @@ function phase(L, st, opts){
       const prev = seen.get(k);
       if(prev !== undefined && prev <= g) continue;
       seen.set(k, g);
+      if(pushed >= maxOpen) continue;
+      pushed++;
       const nocc = E.buildOcc(L, ns);
       open.push({f: g + W*heuristic(L, ns, nocc), g, st:ns, parent:node, mv});
     }
@@ -131,11 +138,14 @@ function verify(level, path){
   let st = {pos:L.start.pos.slice(), out:L.start.out.slice()};
   for(const mv of path){
     const occ = E.buildOcc(L, st);
-    const legal = E.moves(L, st, occ).some(m => m.b===mv.b && m.axis===mv.axis && m.d===mv.d && !!m.exit===!!mv.exit);
+    const legal = E.moves(L, st, occ).some(m =>
+      m.b===mv.b && m.axis===mv.axis && m.d===mv.d && !!m.exit===!!mv.exit && m.to===mv.to);
     if(!legal) return {ok:false, reason:"illegal move", mv};
     st = E.applyMove(L, st, mv);
   }
-  return {ok: E.solved(L, st), moves: path.length};
+  if(!E.solved(L, st)) return {ok:false, reason:"not solved", moves:path.length};
+  if(!E.bombsOk(L, path)) return {ok:false, reason:"a bomb goes off first", moves:path.length};
+  return {ok:true, moves: path.length};
 }
 
 module.exports = {solve, solveOnce, phase, verify, mulberry, Heap};

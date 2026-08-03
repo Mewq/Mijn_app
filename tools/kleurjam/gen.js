@@ -286,17 +286,13 @@ function generate(seed, P){
       if(!opts.length) continue;
       let best = Infinity, bests = [];
       for(const m of opts){
-        let r = (st.pos[j]/COLS)|0, c = st.pos[j]%COLS;
-        if(m.axis === "H") c += m.d; else r += m.d;
+        const r = (m.to/COLS)|0, c = m.to%COLS;
         let overlap = 0;
         for(const rc of bj.cells) if(zone.has((r+rc[0])*COLS + (c+rc[1]))) overlap++;
         if(overlap < best){ best = overlap; bests = [m]; }
         else if(overlap === best) bests.push(m);
       }
-      const m = pick(rnd, bests);
-      let r = (st.pos[j]/COLS)|0, c = st.pos[j]%COLS;
-      if(m.axis === "H") c += m.d; else r += m.d;
-      st.pos[j] = r*COLS + c;
+      st.pos[j] = pick(rnd, bests).to;
     }
   }
 
@@ -309,16 +305,12 @@ function generate(seed, P){
       if(!opts.length) return;
       let best = -Infinity, bests = [];
       for(const m of opts){
-        let r = (st.pos[i]/COLS)|0, c = st.pos[i]%COLS;
-        if(m.axis === "H") c += m.d; else r += m.d;
+        const r = (m.to/COLS)|0, c = m.to%COLS;
         const d = gateDist(L, b, r, c);
         if(d > best){ best = d; bests = [m]; }
         else if(d === best) bests.push(m);
       }
-      const m = pick(rnd, bests);
-      let r = (st.pos[i]/COLS)|0, c = st.pos[i]%COLS;
-      if(m.axis === "H") c += m.d; else r += m.d;
-      st.pos[i] = r*COLS + c;
+      st.pos[i] = pick(rnd, bests).to;
     }
   }
 
@@ -334,8 +326,7 @@ function generate(seed, P){
       if(rnd() < (P.awayBias === undefined ? 0.8 : P.awayBias)){
         let best = -Infinity, bests = [];
         for(const m of opts){
-          let r = (st.pos[i]/COLS)|0, c = st.pos[i]%COLS;
-          if(m.axis === "H") c += m.d; else r += m.d;
+          const r = (m.to/COLS)|0, c = m.to%COLS;
           const d = b.gate ? gateDist(L, b, r, c)
                            : Math.min(r, ROWS-1-r) + Math.min(c, COLS-1-c); // stones drift inward
           if(d > best){ best = d; bests = [m]; }
@@ -343,9 +334,7 @@ function generate(seed, P){
         }
         chosen = pick(rnd, bests);
       } else chosen = pick(rnd, opts);
-      let r = (st.pos[i]/COLS)|0, c = st.pos[i]%COLS;
-      if(chosen.axis === "H") c += chosen.d; else r += chosen.d;
-      st.pos[i] = r*COLS + c;
+      st.pos[i] = chosen.to;
     }
   }
 

@@ -23,9 +23,7 @@ function perturb(L, st, rnd, n){
     const mvs = E.moves(L, ns, occ).filter(m => !m.exit);
     if(!mvs.length) break;
     const m = mvs[(rnd()*mvs.length)|0];
-    let r = (ns.pos[m.b]/L.COLS)|0, c = ns.pos[m.b]%L.COLS;
-    if(m.axis === "H") c += m.d; else r += m.d;
-    ns.pos[m.b] = r*L.COLS + c;
+    ns.pos[m.b] = m.to;
   }
   return ns;
 }

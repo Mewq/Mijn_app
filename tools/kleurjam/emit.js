@@ -11,20 +11,30 @@ const NAMES = [
   ["Alle kanten op",    "De stipjes op een blok verklappen welke kant het op mag."],
   ["Om de muur",        "Door de gestreepte muren kun je niet heen."],
   ["Grijze stenen",     "Grijze stenen hoeven niet weg, maar ze zitten wel in de weg."],
+  ["Smalle poort",      "Een blok past alleen door een poort die breed genoeg is."],
   ["Kettingreactie",    "Zoek het blok dat als eerste naar buiten kan."],
   ["Even terug",        "Soms moet een blok eerst de verkeerde kant op."],
-  ["Vierkant probleem", "Grote vierkanten hebben veel ruimte nodig om te draaien."],
+  ["Vierkant probleem", "Grote vierkanten hebben veel ruimte nodig."],
   ["Haakse bocht",      "L-vormen passen maar op één manier door de poort."],
+  ["Vaste koers",       "Sommige blokken mogen maar één richting op."],
   ["Spitsuur",          "Ruim eerst op wat je later nodig hebt."],
+  ["Wisselplaats",      "Twee blokken moeten van plek ruilen."],
   ["Doorgang",          "Alles moet door hetzelfde gat."],
   ["Knooppunt",         "Twee blokken houden elkaar vast. Eentje moet wijken."],
+  ["Sluisdeur",         "Eén blok bewaakt de weg naar drie poorten."],
   ["Opstopping",        "Werk van buiten naar binnen: leeg eerst de randen."],
+  ["Dubbel op",         "Twee blokken van dezelfde kleur delen één poort."],
   ["Puzzelplein",       "Bijna honderd zetten. Neem de tijd."],
+  ["Rangeerterrein",    "Schuif een blok opzij en het volgende komt vrij."],
   ["De grote jam",      "Ruim de poorten leeg voordat je aan het midden begint."],
   ["Vastgelopen",       "Elke vrije plek telt. Verspil er geen."],
+  ["Nauwe marge",       "Er is maar net genoeg ruimte om te draaien."],
   ["Rommelzolder",      "Veel kleine blokjes — begin bij de poort die het dichtst bij is."],
   ["Kluwen",            "Denk twee zetten vooruit voor je iets verschuift."],
+  ["Uitpuzzelen",       "Er is één volgorde die werkt. Zoek hem."],
+  ["Laatste ruimte",    "Nog een handvol lege vakjes. Gebruik ze goed."],
   ["Meesterproef",      "Meer dan honderd zetten. Rustig ademhalen."],
+  ["Eindspel",          "Bijna niets kan bewegen. Bijna."],
   ["De Kleurjam",       "Het diepste punt van het bord. Veel succes."]
 ];
 
@@ -58,31 +68,46 @@ console.error("pool size", all.length, "par range", all.length ? all[0].par + "-
 const TARGETS = (process.env.TARGETS || "6,9,13,17,22,27,32,38,45,52,60,70,80,88,95,102,108,115,122,130")
   .split(",").map(Number);
 
-const chosen = [];
-const used = new Set();
-for(const t of TARGETS){
-  let best = null, bestD = Infinity;
-  for(let i=0;i<all.length;i++){
-    if(used.has(i)) continue;
-    const d = Math.abs(all[i].par - t);
-    if(d < bestD){ bestD = d; best = i; }
-  }
-  if(best === null) break;
-  used.add(best);
-  chosen.push(all[best]);
-}
-chosen.sort((a,b)=>a.par-b.par);
+/* Every rung is re-solved before it is accepted. If a candidate cannot be
+   re-solved, fall through to the next-closest one rather than leaving a hole:
+   the search is randomised, so an occasional miss says more about the solver's
+   budget than about the level. */
+const EFFORT = [
+  {tries:2, cap:60000, weight:2.1, maxMoves:1400},
+  {tries:2, cap:120000, weight:1.8, maxMoves:1400}
+];
 
-/* re-verify everything that is about to ship */
+function reverify(l){
+  for(const cfg of EFFORT){
+    const path = S.solve(l, cfg);
+    if(path && S.verify(l, path).ok) return path.length;
+  }
+  return null;
+}
+
+const used = new Set();
 const finalLevels = [];
-chosen.forEach((l, i) => {
-  const path = S.solve(l, {tries:2, cap:60000, weight:2.1, maxMoves:1400});
-  if(!path){ console.error(`level ${i+1} (par ${l.par}) could not be re-solved — dropped`); return; }
-  const v = S.verify(l, path);
-  if(!v.ok){ console.error(`level ${i+1} failed verification — dropped`); return; }
-  l.par = Math.min(l.par, path.length);
-  finalLevels.push(l);
-});
+for(const t of TARGETS){
+  const order = all.map((l, i) => i)
+                   .filter(i => !used.has(i))
+                   .sort((x, y) => Math.abs(all[x].par - t) - Math.abs(all[y].par - t));
+  let taken = false;
+  for(const i of order.slice(0, 8)){
+    const len = reverify(all[i]);
+    if(len === null){
+      used.add(i);                       // unreachable for us; never offer it again
+      console.error(`pool level (par ${all[i].par}) could not be re-solved — skipped`);
+      continue;
+    }
+    used.add(i);
+    all[i].par = Math.min(all[i].par, len);
+    finalLevels.push(all[i]);
+    taken = true;
+    break;
+  }
+  if(!taken) console.error(`no level left for target ${t}`);
+}
+finalLevels.sort((a,b)=>a.par-b.par);
 
 const fmt = (l, i) => {
   const [name, hint] = NAMES[i] || ["Level " + (i+1), ""];

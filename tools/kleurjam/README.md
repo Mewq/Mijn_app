@@ -141,6 +141,36 @@ terug op afgeronde systeemletters.
 | `playsolve.js` | oplossingen naspelen in een echte browser |
 | `artifact.js` | pagina-versie zonder externe verzoeken |
 
+## Stand van zaken: mechanics (onaf)
+
+`engine.js` kent al negen extra mechanics — klok, bommen, poorten op slot,
+bevroren blokken, tweekleurige blokken, pijltegels, ijstegels, sleutel & slot en
+sterren. De solver rekent er dus goed mee. **Het spel zelf kent ze nog niet**, en
+geen enkel level in `kleurjam.html` gebruikt ze, dus voor de huidige levels
+verandert er niets.
+
+Wat er ligt en wat er nog moet:
+
+| onderdeel | staat |
+| --- | --- |
+| regels in `engine.js` | klaar |
+| `decorate.js` — klok, bom, slot, bevroren, sleutel, tweekleurig aan een bestaand level hangen | klaar |
+| `genfx.js` — levels mét ijs- of pijltegels genereren | klaar |
+| `wip-mechanics-patch.py` — de kant van het spel | geschreven, **nog niet toegepast** |
+| levels die de mechanics gebruiken | nog niet |
+| `playsolve.js` uitbreiden met klok- en bomcontrole | nog niet |
+
+`decorate.js` werkt op een level dat al een geverifieerde oplossing heeft, en
+leidt elke mechanic uit die oplossing af: een poort gaat pas op slot vanaf een
+moment dat de oplossing hem toch nog niet gebruikte, een blok blijft alleen
+bevroren tot vlak voor de zet waarop het voor het eerst nodig is, en een bom
+krijgt de zet waarop het blok toch al vertrok plus wat marge. Daardoor blijft
+diezelfde oplossing geldig en is het level dus nog steeds uit te spelen.
+
+IJs en pijlen kunnen niet op die manier: die veranderen hoe blokken bewegen, dus
+die moeten al bij het genereren mee (`genfx.js`) en worden daarna gewoon door de
+solver nagerekend.
+
 ## Als je de spelregels aanpast
 
 `engine.js` is een kopie van de regels in `kleurjam.html` (`fitsInside`,
