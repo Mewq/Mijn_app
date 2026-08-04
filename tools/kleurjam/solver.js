@@ -138,8 +138,12 @@ function verify(level, path){
   let st = {pos:L.start.pos.slice(), out:L.start.out.slice()};
   for(const mv of path){
     const occ = E.buildOcc(L, st);
-    const legal = E.moves(L, st, occ).some(m =>
-      m.b===mv.b && m.axis===mv.axis && m.d===mv.d && !!m.exit===!!mv.exit && m.to===mv.to);
+    // Bij een uitgangszet telt alleen dat het blok eruit kán: via welke poort en
+    // over hoeveel vakjes is een detail van de sleep, en dat kan veranderen zodra
+    // een blok een tweede kleur krijgt.
+    const legal = E.moves(L, st, occ).some(m => mv.exit
+      ? (m.b === mv.b && m.exit)
+      : (m.b===mv.b && m.axis===mv.axis && m.d===mv.d && !m.exit && m.to===mv.to));
     if(!legal) return {ok:false, reason:"illegal move", mv};
     st = E.applyMove(L, st, mv);
   }

@@ -71,6 +71,8 @@ rep("""  #hint{""",
   @keyframes shake{25%{transform:translateX(-1.5px);}75%{transform:translateX(1.5px);}}
   .half2{position:absolute;inset:0;border-radius:inherit;clip-path:polygon(100% 0,100% 100%,0 100%);}
   .keymark{position:absolute;display:grid;place-items:center;z-index:2;pointer-events:none;}
+  /* een blok dat het bord af is, mag geen aanrakingen meer opvangen */
+  .block.exited, .block.exited .bcell{pointer-events:none;}
 
   .stars{display:flex;gap:4px;justify-content:center;margin-bottom:10px;font-size:26px;line-height:1;}
   .stars .s{opacity:.22;}
@@ -523,21 +525,35 @@ rep("""  function onUp(e, b){
 
     // waar het blok belandt: ijs kan het verder meenemen
     let landR = drag.row, landC = drag.col, skid = null;
+    let dr = drag.axis === "V" ? Math.sign(offset) : 0;
+    let dc = drag.axis === "H" ? Math.sign(offset) : 0;
     if(!leaving){
       if(drag.axis === "H") landC = drag.col + offset;
       else                  landR = drag.row + offset;
-      const dr = drag.axis === "V" ? Math.sign(offset) : 0;
-      const dc = drag.axis === "H" ? Math.sign(offset) : 0;
       const rest = iceSlide(b, landR, landC, dr, dc, b.occ);
-      if(rest.exit){ leaving = true; }
-      else if(rest.r !== landR || rest.c !== landC){ skid = rest; }
+      if(rest.exit){
+        // doorglijden tot buiten het bord
+        leaving = true;
+        const info = exitGateFor(b, rest.r, rest.c, b.occ);
+        const steps = info ? info.steps : Math.max(ROWS, COLS);
+        skid = {r: rest.r + dr*steps, c: rest.c + dc*steps};
+      } else if(rest.r !== landR || rest.c !== landC){
+        skid = rest;
+      }
+    } else {
+      // het blok schuift het bord uit, dus de eindstand ligt buiten het bord
+      landR = drag.row; landC = drag.col;
     }
 
     pushHistory();
     startClock();
-    if(!leaving){
-      b.row = skid ? skid.r : landR;
-      b.col = skid ? skid.c : landC;
+    if(skid){
+      b.row = skid.r; b.col = skid.c;
+    } else if(leaving){
+      if(drag.axis === "H") b.col = drag.col + offset;
+      else                  b.row = drag.row + offset;
+    } else {
+      b.row = landR; b.col = landC;
     }
 
     moveCount++;

@@ -6,7 +6,7 @@
    (dus oplosbaar) level bouwen met gen.js, daar tegels in leggen, en dan met de
    solver kijken of het nog uit te spelen is. Wat niet oplosbaar blijkt gaat weg.
 
-   node genfx.js <ice|arrows> <eersteSeed> <laatsteSeed> <uit.json> [minPar] [maxPar] */
+   node genfx.js <ice|arrows> <eersteSeed> <laatsteSeed> <uit.json> [minPar] [maxPar] [minBlokken] [maxBlokken] */
 
 const fs = require("fs");
 const G = require("./gen"), S = require("./solver"), E = require("./engine");
@@ -16,6 +16,8 @@ const FROM = +process.argv[3], TO = +process.argv[4];
 const OUT  = process.argv[5];
 const MINPAR = +(process.argv[6] || 8);
 const MAXPAR = +(process.argv[7] || 40);
+const MINB   = +(process.argv[8] || 3);
+const MAXB   = +(process.argv[9] || 8);
 
 const BASE = {
   rows:12, cols:12, minColored:3, colors:4, stones:2,
@@ -61,6 +63,22 @@ function arrowRun(rnd, ROWS, COLS, blocked){
   return out;
 }
 
+/* komt er in deze oplossing een blok over een pijltegel? */
+function pathTouchesArrows(lvl, path){
+  const L = E.makeLevel(lvl);
+  const marked = new Set((lvl.arrows||[]).map(a => a[0]*L.COLS + a[1]));
+  let st = {pos:L.start.pos.slice(), out:L.start.out.slice()};
+  for(const mv of path){
+    if(!mv.exit && mv.to >= 0){
+      const b = L.blocks[mv.b];
+      const r = (mv.to / L.COLS) | 0, c = mv.to % L.COLS;
+      for(const rc of b.cells) if(marked.has((r+rc[0])*L.COLS + (c+rc[1]))) return true;
+    }
+    st = E.applyMove(L, st, mv);
+  }
+  return false;
+}
+
 /* glijdt er ergens in deze oplossing een blok door? */
 function pathHasSkid(lvl, path){
   const L = E.makeLevel(lvl);
@@ -81,7 +99,7 @@ function pathHasSkid(lvl, path){
 const results = [];
 for(let seed = FROM; seed <= TO; seed++){
   const rnd = S.mulberry(seed * 7919 + 13);
-  const colored = 3 + ((rnd()*6)|0);
+  const colored = MINB + ((rnd()*(MAXB - MINB + 1))|0);
   const P = Object.assign({}, BASE, {colored, colors: 2 + ((rnd()*3)|0)});
   let base = null;
   try { base = G.generate(seed, P); } catch(e){ base = null; }
@@ -110,9 +128,9 @@ for(let seed = FROM; seed <= TO; seed++){
     // ergens in de oplossing moet een blok verder glijden dan de speler sleept
     matters = pathHasSkid(lvl, path);
   } else {
-    // zonder pijlen moet het aantoonbaar makkelijker zijn
+    // óf het wordt aantoonbaar lastiger, óf de oplossing gaat er echt overheen
     const plain = S.solve(base, {tries:3, cap:60000, weight:2.0, maxMoves:400});
-    matters = !!plain && plain.length < path.length;
+    matters = (!!plain && plain.length < path.length) || pathTouchesArrows(lvl, path);
   }
 
   lvl.par = path.length;
