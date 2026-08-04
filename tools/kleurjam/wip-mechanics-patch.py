@@ -103,6 +103,11 @@ rep("""      <div class="pill-row">
         <div class="pill">🧩 <b id="left-count">0</b> te gaan</div>
       </div>""")
 
+# hidden moet het winnen van .pill{display:flex}
+rep("""  .stars{display:flex;""",
+"""  .pill[hidden]{display:none;}
+  .stars{display:flex;""")
+
 rep("""      <div class="blocks-layer" id="blocks-layer"></div>""",
 """      <div class="blocks-layer" id="blocks-layer"></div>
       <div class="arrows-layer" id="arrows-layer"></div>""")

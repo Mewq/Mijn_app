@@ -140,36 +140,66 @@ terug op afgeronde systeemletters.
 | `finalcheck.js` | controle van het uiteindelijke bestand |
 | `playsolve.js` | oplossingen naspelen in een echte browser |
 | `artifact.js` | pagina-versie zonder externe verzoeken |
+| `decorate.js` | mechanics afleiden uit een geverifieerde oplossing |
+| `genfx.js` | levels mét ijs- of pijltegels |
+| `mechanics.js` | het leerplan over de ladder verdelen |
 
-## Stand van zaken: mechanics (onaf)
+## De negen mechanics
 
-`engine.js` kent al negen extra mechanics — klok, bommen, poorten op slot,
-bevroren blokken, tweekleurige blokken, pijltegels, ijstegels, sleutel & slot en
-sterren. De solver rekent er dus goed mee. **Het spel zelf kent ze nog niet**, en
-geen enkel level in `kleurjam.html` gebruikt ze, dus voor de huidige levels
-verandert er niets.
+Alle negen zitten in het spel én in `engine.js`, zodat de solver er goed mee
+rekent. Het leerplan staat in `mechanics.js`: elke mechanic krijgt eerst een
+eigen rustig level waar hij de enige nieuwe regel is, en pas daarna wordt hij
+gecombineerd.
 
-Wat er ligt en wat er nog moet:
+| level | mechanic | hoe het werkt |
+| --- | --- | --- |
+| 4 | klok | `timeLimit` in seconden; loopt pas vanaf de eerste zet |
+| 5 | poort op slot | `gate.locked.openAfter` — gaat open na zoveel vertrokken blokken |
+| 6 | bevroren blok | `block.frozen.thawAfter` — onbeweeglijk, gedraagt zich als muur |
+| 7 | bom | `block.bomb {type:"zetten"\|"seconden", value}` |
+| 8 | twee kleuren | `block.colors` + `bonusColor` — mag door beide poorten |
+| 9 | pijltegels | `level.arrows [[r,c,richting]]` — alleen mee met de pijl |
+| 10 | ijstegels | `level.ice [[r,c]]` — doorglijden tot iets tegenhoudt |
+| 11 | sleutel & slot | `block.key` + `gate.keyLocked` |
+| overal | sterren | 3 sterren op `par`, 2 tot `par × (1 + starMargin)`, anders 1 |
 
-| onderdeel | staat |
-| --- | --- |
-| regels in `engine.js` | klaar |
-| `decorate.js` — klok, bom, slot, bevroren, sleutel, tweekleurig aan een bestaand level hangen | klaar |
-| `genfx.js` — levels mét ijs- of pijltegels genereren | klaar |
-| `wip-mechanics-patch.py` — de kant van het spel | geschreven, **nog niet toegepast** |
-| levels die de mechanics gebruiken | nog niet |
-| `playsolve.js` uitbreiden met klok- en bomcontrole | nog niet |
+Sterren staan vanaf level 1 aan; de andere acht worden één voor één ingevoerd.
 
-`decorate.js` werkt op een level dat al een geverifieerde oplossing heeft, en
-leidt elke mechanic uit die oplossing af: een poort gaat pas op slot vanaf een
-moment dat de oplossing hem toch nog niet gebruikte, een blok blijft alleen
-bevroren tot vlak voor de zet waarop het voor het eerst nodig is, en een bom
-krijgt de zet waarop het blok toch al vertrok plus wat marge. Daardoor blijft
-diezelfde oplossing geldig en is het level dus nog steeds uit te spelen.
+### Mechanics aan levels hangen
 
-IJs en pijlen kunnen niet op die manier: die veranderen hoe blokken bewegen, dus
-die moeten al bij het genereren mee (`genfx.js`) en worden daarna gewoon door de
-solver nagerekend.
+```sh
+node --max-old-space-size=3000 mechanics.js ../../kleurjam.html ice-all.json arrows2.json
+```
+
+`mechanics.js` leest het leerplan bovenin zichzelf. Voor klok, bom, slot,
+bevroren, sleutel en tweekleurig gebruikt het `decorate.js`; voor ijs en pijlen
+haalt het een level uit een pool van `genfx.js`.
+
+`decorate.js` leidt elke mechanic af uit een oplossing die al geverifieerd is:
+een poort gaat pas op slot vanaf een moment dat die oplossing hem toch nog niet
+gebruikte, een blok blijft alleen bevroren tot vlak voor de zet waarop het nodig
+is, en een bom krijgt de zet waarop het blok toch al vertrok plus wat marge.
+Daardoor blijft diezelfde oplossing geldig en is het level dus nog steeds uit te
+spelen — de speler moet die volgorde alleen zelf vinden.
+
+IJs en pijlen kunnen niet op die manier: die veranderen hoe blokken bewegen. Die
+komen uit `genfx.js`, dat een gewoon level bouwt, er tegels in legt en de solver
+laat kijken of het nog uitspeelbaar is. Het controleert ook of de tegels écht
+iets doen — bij ijs moet er ergens een blok doorglijden, bij pijlen moet de
+oplossing er overheen gaan of aantoonbaar langer worden.
+
+```sh
+node genfx.js ice    100 400 ice.json     18 55        # kleine ijslevels
+node genfx.js ice   2000 2400 ice-big.json 30 80 10 20 # grotere
+node genfx.js arrows 3000 3500 arrows2.json 15 80 5 18
+```
+
+### Wat de solver wel en niet nakijkt
+
+`verify()` controleert de zetten, de winst én de bommen die in *zetten*
+aftellen. Wat op de klok loopt (`timeLimit` en bommen in seconden) valt buiten
+een zoekruimte van zetten; die waarden worden afgeleid uit de lengte van de
+gevonden oplossing, met ruime marge.
 
 ## Als je de spelregels aanpast
 

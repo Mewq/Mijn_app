@@ -262,9 +262,12 @@ function moves(L, st, occ){
       }
     }
     const info = exitGateFor(L, b, r0, c0, occ, i, st);   // deliberate drag out
-    if(info && !seen.has("-1:1")){
-      seen.add("-1:1");
-      out.push({b:i, axis:SIDE_AXIS[info.gate.side], d:info.steps, to:-1, exit:true});
+    if(info){
+      // `drag:true` betekent: de speler sleept het blok zelf het bord uit. Zonder
+      // die vlag zou een uitgang via het ijs (waar de speler maar een stukje
+      // sleept en het blok doorglijdt) er hetzelfde uitzien.
+      out.push({b:i, axis:SIDE_AXIS[info.gate.side], d:info.steps, to:-1, exit:true,
+                drag:true, gate:info.gate.color});
     }
   }
   return out;

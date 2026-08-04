@@ -23,7 +23,13 @@ const LEVELS = eval(html.slice(s + "const LEVELS = ".length, e + 4));
 
   for(const idx of which){
     const lvl = LEVELS[idx];
-    const path = S.solve(lvl, {tries:3, cap:70000, weight:2.0, maxMoves:1400});
+    // verify() keurt ook de bommen, dus zo krijgen we een route die het level
+    // echt uitspeelt in plaats van halverwege te ontploffen
+    let path = null;
+    for(const cfg of [{tries:3, cap:70000, weight:2.0}, {tries:2, cap:120000, weight:1.7}]){
+      const p = S.solve(lvl, Object.assign({maxMoves:1400}, cfg));
+      if(p && S.verify(lvl, p).ok){ path = p; break; }
+    }
     if(!path){ console.log(`level ${idx+1}: no solution found, skipped`); continue; }
 
     await page.evaluate(i => document.querySelectorAll(".lvl-tile")[i].click(), idx);
@@ -46,11 +52,14 @@ const LEVELS = eval(html.slice(s + "const LEVELS = ".length, e + 4));
       const startX = box.x, startY = box.y;
       // exit distances are stored unsigned, so take the direction from the gate
       let d = mv.d;
-      if(mv.exit){
-        const g = lvl.gates.find(x => x.color === lvl.blocks[mv.b].color);
+      if(mv.exit && mv.drag){
+        // eruit slepen: net over de rand trekken zodat het spel de zet accepteert
+        const g = lvl.gates.find(x => x.color === mv.gate)
+               || lvl.gates.find(x => x.color === lvl.blocks[mv.b].color);
         const sign = (g.side === "left" || g.side === "top") ? -1 : 1;
         d = sign * (Math.abs(mv.d) + 0.9);
       }
+      // eruit glijden over ijs: gewoon slepen zoals de zet zegt, het blok doet de rest
       const dist = d * cell;
       const dx = mv.axis === "H" ? dist : 0;
       const dy = mv.axis === "V" ? dist : 0;
@@ -71,10 +80,26 @@ const LEVELS = eval(html.slice(s + "const LEVELS = ".length, e + 4));
       moves: +document.getElementById("moves-count").textContent,
       left: +document.getElementById("left-count").textContent,
       won: document.getElementById("win-modal").classList.contains("show"),
-      sub: document.getElementById("win-sub").textContent
+      lost: document.getElementById("fail-modal").classList.contains("show"),
+      lostWhy: document.getElementById("fail-title").textContent,
+      stars: document.querySelectorAll("#win-stars .s.on").length,
+      timer: document.getElementById("timer-pill").hidden ? null
+             : document.getElementById("time-left").textContent
     }));
-    console.log(`level ${idx+1} "${lvl.name}" par=${lvl.par}: solution=${path.length} ` +
-      `played=${state.moves} left=${state.left} won=${state.won}` + (failed ? "  FAILED: " + failed : ""));
+    const mech = [];
+    if(lvl.timeLimit) mech.push("klok");
+    if(lvl.blocks.some(b => b.bomb)) mech.push("bom");
+    if(lvl.gates.some(g => g.locked)) mech.push("slot");
+    if(lvl.gates.some(g => g.keyLocked)) mech.push("sleutel");
+    if(lvl.blocks.some(b => b.frozen)) mech.push("bevroren");
+    if(lvl.blocks.some(b => b.colors)) mech.push("2-kleur");
+    if(lvl.ice && lvl.ice.length) mech.push("ijs");
+    if(lvl.arrows && lvl.arrows.length) mech.push("pijlen");
+    console.log(`level ${String(idx+1).padStart(2)} "${lvl.name}" par=${lvl.par}: solution=${path.length} ` +
+      `played=${state.moves} left=${state.left} won=${state.won} sterren=${state.stars}` +
+      (state.lost ? ` VERLOREN (${state.lostWhy})` : "") +
+      (mech.length ? "  [" + mech.join(" ") + "]" : "") +
+      (failed ? "  FAILED: " + failed : ""));
     if(state.won) await page.evaluate(() => document.getElementById("win-modal").classList.remove("show"));
   }
   console.log(errors.length ? "PAGE ERRORS: " + errors.join(" | ") : "no page errors");

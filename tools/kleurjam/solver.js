@@ -91,17 +91,36 @@ function phase(L, st, opts){
   return null;
 }
 
-/* full solve = chain of phases */
+/* Full solve = chain of phases.
+
+   Elke fase kiest de goedkoopste manier om één blok naar buiten te krijgen, en
+   dat is een gok: op een propvol bord kan een blok dat er vroeg uit gaat de rest
+   opsluiten. Loopt een fase vast, dan draaien we de vorige terug en zoeken die
+   opnieuw met een andere volgorde. Zonder dat terugstappen bleven een paar zware
+   levels onvindbaar terwijl er wel degelijk een oplossing was. */
 function solveOnce(L, opts){
   opts = opts || {};
+  const baseRnd = opts.rnd || Math.random;
   let st = {pos:L.start.pos.slice(), out:L.start.out.slice()};
   const all = [];
+  const stack = [];
   const maxMoves = opts.maxMoves || 500;
-  let guard = 0;
+  const maxBack = opts.backtracks === undefined ? 8 : opts.backtracks;
+  let guard = 0, backs = 0, salt = 0;
+
   while(!E.solved(L, st)){
-    if(guard++ > L.blocks.length + 4) return null;
-    const p = phase(L, st, opts);
-    if(!p) return null;
+    if(guard++ > (L.blocks.length + 6) * (maxBack + 1)) return null;
+    const rnd = salt === 0 ? baseRnd : mulberry(9001 + salt * 7717);
+    const p = phase(L, st, Object.assign({}, opts, {rnd}));
+    if(!p){
+      if(backs++ >= maxBack || !stack.length) return null;
+      const prev = stack.pop();
+      st = prev.state;
+      all.length = prev.len;
+      salt++;                       // volgende poging kiest een andere volgorde
+      continue;
+    }
+    stack.push({state: st, len: all.length});
     for(const mv of p.path) all.push(mv);
     st = p.state;
     if(all.length > maxMoves) return null;
