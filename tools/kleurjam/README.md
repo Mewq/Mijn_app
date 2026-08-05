@@ -143,6 +143,7 @@ terug op afgeronde systeemletters.
 | `decorate.js` | mechanics afleiden uit een geverifieerde oplossing |
 | `genfx.js` | levels mét ijs- of pijltegels |
 | `mechanics.js` | het leerplan over de ladder verdelen |
+| `addlevels.js` | levels aan de ladder toevoegen en het leerplan bewaken |
 
 ## De negen mechanics
 
@@ -192,6 +193,34 @@ oplossing er overheen gaan of aantoonbaar langer worden.
 node genfx.js ice    100 400 ice.json     18 55        # kleine ijslevels
 node genfx.js ice   2000 2400 ice-big.json 30 80 10 20 # grotere
 node genfx.js arrows 3000 3500 arrows2.json 15 80 5 18
+```
+
+### Levels met veel muren
+
+Muren kosten de solver niets — ze zitten niet in de toestand, dus de zoekruimte
+blijft even groot — maar ze dwingen blokken door nauwe doorgangen, en juist de
+grote vormen komen daar klem te zitten. De `maze`-preset zet ze eerst neer en
+propt de blokken daarna in wat overblijft:
+
+```sh
+# kamer met één deuropening, 6 losse pilaren erbij
+node --max-old-space-size=2500 pipeline.js 9300 9380 maze.json maze 100 12 28 8 "" chamber 6
+
+# twee kamers naast elkaar
+node --max-old-space-size=2500 pipeline.js 9400 9480 maze2.json maze 100 12 28 8 "" split 7
+```
+
+De twee laatste argumenten zijn het muurpatroon (`chamber`, `cross`, `band`,
+`pillars`, `combs` uit `rooms.js`) en het aantal extra pilaren. Levert een
+patroon een onoplosbaar bord op, dan valt dat vanzelf af: de solver vindt geen
+route en de kandidaat gaat weg.
+
+Toevoegen aan de ladder gaat met `addlevels.js`, dat elk level opnieuw oplost,
+er mechanics aan hangt, de ladder op zwaarte sorteert en nakijkt dat elke
+mechanic nog steeds solo voorkomt voordat hij gecombineerd wordt:
+
+```sh
+MINWALLS=12 node --max-old-space-size=3000 addlevels.js ../../kleurjam.html 5 maze.json maze2.json
 ```
 
 ### Wat de solver wel en niet nakijkt

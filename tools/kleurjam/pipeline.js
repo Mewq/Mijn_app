@@ -36,6 +36,15 @@ const PRESETS = {
     shapes:"D1,D1,I2,I2,I3,L3,O,S4,T4,L4".split(","), stoneShapes:["D1","I2","L3"],
     addShapes:["D1","I2","I3","L3","O","S4","T4","L4","J4","Z4"], stoneRatio:.18
   },
+  // Veel muren eerst, daarna blokken in wat overblijft. Muren kosten de solver
+  // niets (ze zitten niet in de toestand) maar dwingen blokken door nauwe
+  // doorgangen, en juist de grote vormen komen daar klem te zitten.
+  maze: {
+    colored:20, stones:3, colors:8, pushDeep:4, slides:2, finalSlides:8, insertDepth:3,
+    wallClusters:6, restricted:.3, awayBias:.9, spanSlack:1,
+    shapes:"I2,I3,L3,O,T4,S4,Z4,L4,J4,P5,U5,O6".split(","), stoneShapes:["I2","L3","O","T4"],
+    addShapes:["I2","I3","L3","O","T4","S4","Z4","L4","J4","P5","O6"], stoneRatio:.3
+  },
   chunky: {
     colored:30, stones:3, colors:8, pushDeep:5, slides:2, finalSlides:8, insertDepth:2,
     wallClusters:2, restricted:.35, awayBias:.9, spanSlack:0,
@@ -56,6 +65,8 @@ const P = Object.assign({rows:12, cols:12, minColored:10}, PRESETS[presetName]);
 if(process.argv[8]) P.colored = +process.argv[8];
 if(process.argv[9]) P.colors = +process.argv[9];
 if(process.argv[10]) P.shapes = process.argv[10].split(',');
+if(process.argv[11]) P.wallStyle = process.argv[11];
+if(process.argv[12]) P.wallClusters = +process.argv[12];
 
 const results = [];
 for(let seed = from; seed <= to; seed++){
