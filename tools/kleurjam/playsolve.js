@@ -8,6 +8,8 @@ const S = require("./solver");
 
 const file = process.argv[2];
 const which = (process.argv[3] || "0").split(",").map(Number);
+let OPGESLAGEN = {};
+try { OPGESLAGEN = JSON.parse(fs.readFileSync(__dirname + "/solutions.json", "utf8")); } catch(e){}
 
 const html = fs.readFileSync(file, "utf8");
 const s = html.indexOf("const LEVELS = ["), e = html.indexOf("\n  ];", s);
@@ -26,7 +28,13 @@ const LEVELS = eval(html.slice(s + "const LEVELS = ".length, e + 4));
     // verify() keurt ook de bommen, dus zo krijgen we een route die het level
     // echt uitspeelt in plaats van halverwege te ontploffen
     let path = null;
+    if(OPGESLAGEN[lvl.name]){
+      const bewaard = OPGESLAGEN[lvl.name];
+      if(S.verify(lvl, bewaard).ok) path = bewaard;
+      else console.log(`level ${idx+1}: bewaarde route klopt niet meer, opnieuw zoeken`);
+    }
     for(const cfg of [{tries:3, cap:70000, weight:2.0}, {tries:2, cap:120000, weight:1.7}]){
+      if(path) break;
       const p = S.solve(lvl, Object.assign({maxMoves:1400}, cfg));
       if(p && S.verify(lvl, p).ok){ path = p; break; }
     }

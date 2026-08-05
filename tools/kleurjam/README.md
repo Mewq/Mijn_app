@@ -144,6 +144,9 @@ terug op afgeronde systeemletters.
 | `genfx.js` | levels mét ijs- of pijltegels |
 | `mechanics.js` | het leerplan over de ladder verdelen |
 | `addlevels.js` | levels aan de ladder toevoegen en het leerplan bewaken |
+| `pickhard.js` | levels kiezen op weinig directe uitgangen en veel vallen |
+| `analyse.js` | die eigenschappen meten |
+| `solutions.json` | bewaarde, geverifieerde routes |
 
 ## De negen mechanics
 
@@ -222,6 +225,39 @@ mechanic nog steeds solo voorkomt voordat hij gecombineerd wordt:
 ```sh
 MINWALLS=12 node --max-old-space-size=3000 addlevels.js ../../kleurjam.html 5 maze.json maze2.json
 ```
+
+### Levels waar het bijna perfect moet
+
+`pickhard.js` kiest levels op eigenschappen die niet uit de par blijken, en
+meet ze met `analyse.js`:
+
+* **meteen eruit** — hoeveel blokken bij de start al naar buiten kunnen. Gesloten
+  poorten zijn hier het stuurmiddel: zolang een poort dicht is kan geen enkel
+  blok van die kleur weg.
+* **traag** — het aandeel blokken dat pas na vijf of meer zetten überhaupt
+  uitgangsklaar staat. Gemeten door de oplossing af te spelen.
+* **vallen** — hoeveel openingszetten leiden tot een stand waar de solver, mét
+  terugstappen, geen route meer vindt. Geen bewijs van een doodlopende weg — de
+  solver is niet volledig — maar wel precies het vastgelopen-gevoel.
+
+```sh
+MINPAR=95 BOMBSLACK=5 node --max-old-space-size=3000 pickhard.js ../../kleurjam.html 5 pool1.json pool2.json
+```
+
+Bommen krijgen een marge die meeschaalt met het moment waarop het blok toch al
+vertrekt (`frac`, standaard 0,3). Een vaste marge van drie zetten is op zet 5
+wurgend en op zet 40 niets.
+
+### solutions.json: het bewijs bij het level
+
+Bij zulke strakke bommen vindt een nieuwe zoektocht zelden nog een route die
+alles haalt, terwijl de route waaruit het level gebouwd is dat aantoonbaar wel
+doet. Die route wordt daarom bewaard in `solutions.json`. `playsolve.js` speelt
+hem na als hij er is, en valt anders terug op zelf zoeken.
+
+Dat is meteen de eerlijkste maat voor "bijna perfect": een level waarvoor de
+solver zelf geen alternatieve route meer vindt, laat de speler ook nauwelijks
+speling.
 
 ### Wat de solver wel en niet nakijkt
 

@@ -57,8 +57,13 @@ function addBomb(lvl, L, sch, rnd, opts){
   cands.sort((a,b) => sch.exitAt[a] - sch.exitAt[b]);
   const pool = cands.slice(Math.min(1, cands.length-1), Math.max(2, Math.ceil(cands.length*0.5)));
   const i = pool[(rnd()*pool.length)|0];
+  // Marge evenredig aan het moment waarop het blok toch al vertrekt. Een vaste
+  // marge van drie zetten is op zet 5 wurgend en op zet 40 niets; zo staat de
+  // druk overal gelijk.
+  const frac = (opts && opts.frac) === undefined ? 0.3 : opts.frac;
+  const ruimte = Math.max(slack, Math.round(sch.exitAt[i] * frac));
   const value = type === "moves"
-    ? sch.exitAt[i] + slack
+    ? sch.exitAt[i] + ruimte
     : Math.round((sch.exitAt[i] * 3.2 + 20) / 5) * 5;
   lvl.blocks[i].bomb = {type, value};
   return `bom op ${lvl.blocks[i].color} (${value} ${type === "moves" ? "zetten" : "sec"})`;

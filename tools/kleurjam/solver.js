@@ -35,7 +35,14 @@ class Heap {
   }
 }
 
-function heuristic(L, st, occ){
+function heuristic(L, st, occ, goal){
+  // Met een doelblok telt alleen dat blok: zo kan de zoeker gericht één bepaald
+  // blok naar buiten werken in plaats van het eerstvolgende dat meevalt.
+  if(goal !== undefined && goal !== null){
+    if(st.out[goal]) return 0;
+    const c = E.exitCost(L, st, occ, goal);
+    return c === Infinity ? 0 : c;
+  }
   let best = Infinity;
   for(let i=0;i<L.blocks.length;i++){
     if(st.out[i] || !L.blocks[i].gate) continue;
@@ -51,12 +58,15 @@ function phase(L, st, opts){
   // Niet het aantal uitgeklapte knopen maar het aantal bewaarde toestanden
   // bepaalt het geheugengebruik: met ~150 opvolgers per knoop loopt dat anders
   // hard op. Boven deze grens zoeken we verder met wat er al in de wachtrij zit.
-  const maxOpen = opts.maxOpen || 250000;
+  // Een toestand van 60 blokken kost veel meer dan een van 10, dus schaalt de
+  // grens mee met het aantal blokken.
+  const maxOpen = opts.maxOpen || Math.max(40000, Math.floor(1600000 / Math.max(8, L.blocks.length)));
   let pushed = 0;
   const W = opts.weight || 2.2;
   const rnd = opts.rnd || Math.random;
+  const goal = opts.goal;
   const seen = new Map();
-  const h0 = heuristic(L, st, E.buildOcc(L, st));
+  const h0 = heuristic(L, st, E.buildOcc(L, st), goal);
   const open = new Heap();
   open.push({f:W*h0, g:0, st, parent:null, mv:null});
   seen.set(E.stateKey(L, st), 0);
@@ -70,22 +80,24 @@ function phase(L, st, opts){
     for(let i=mvs.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; const t=mvs[i]; mvs[i]=mvs[j]; mvs[j]=t; }
     for(const mv of mvs){
       const ns = E.applyMove(L, node.st, mv);
-      if(mv.exit){
+      if(mv.exit && (goal === undefined || goal === null || mv.b === goal)){
         const path = [mv];
         let p = node;
         while(p && p.mv){ path.push(p.mv); p = p.parent; }
         path.reverse();
         return {path, state:ns, expanded};
       }
+      // Boven de grens niets meer bijhouden: ook de bezochte-lijst groeide door
+      // terwijl er allang niets meer in de wachtrij ging, en dát liep uit de hand.
+      if(pushed >= maxOpen) continue;
       const k = E.stateKey(L, ns);
       const g = node.g + 1;
       const prev = seen.get(k);
       if(prev !== undefined && prev <= g) continue;
       seen.set(k, g);
-      if(pushed >= maxOpen) continue;
       pushed++;
       const nocc = E.buildOcc(L, ns);
-      open.push({f: g + W*heuristic(L, ns, nocc), g, st:ns, parent:node, mv});
+      open.push({f: g + W*heuristic(L, ns, nocc, goal), g, st:ns, parent:node, mv});
     }
   }
   return null;
@@ -111,7 +123,22 @@ function solveOnce(L, opts){
   while(!E.solved(L, st)){
     if(guard++ > (L.blocks.length + 6) * (maxBack + 1)) return null;
     const rnd = salt === 0 ? baseRnd : mulberry(9001 + salt * 7717);
-    const p = phase(L, st, Object.assign({}, opts, {rnd}));
+    // Een bom die bijna afloopt krijgt voorrang: anders werkt de zoeker het
+    // goedkoopste blok naar buiten en ontploft ondertussen een ander.
+    let goal = null;
+    if(!opts.ignoreBombs){
+      const occ = E.buildOcc(L, st);
+      let krapst = Infinity;
+      for(let i=0;i<L.blocks.length;i++){
+        const bomb = L.blocks[i].bomb;
+        if(!bomb || bomb.type !== "moves" || st.out[i]) continue;
+        const over = bomb.value - all.length;                 // zetten die resten
+        const nodig = E.exitCost(L, st, occ, i);
+        const marge = over - nodig;
+        if(marge < krapst && marge < 6){ krapst = marge; goal = i; }
+      }
+    }
+    const p = phase(L, st, Object.assign({}, opts, {rnd, goal}));
     if(!p){
       if(backs++ >= maxBack || !stack.length) return null;
       const prev = stack.pop();
