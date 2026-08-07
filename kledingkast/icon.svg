@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Kledingkast">
+  <rect width="512" height="512" fill="#a9683c"/>
+  <g fill="none" stroke="#faf3ec" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 243 L256 207 A 32 32 0 1 1 288 179"/>
+    <path d="M256 243 L106 357 L406 357 Z"/>
+  </g>
+</svg>
