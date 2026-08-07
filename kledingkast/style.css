@@ -750,6 +750,288 @@ input, textarea, select { font: inherit; }
 
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ────────────────── Segmentkiezer: outfits versus mappen ──────────────── */
+
+.segment {
+  display: flex;
+  gap: 4px;
+  margin: 12px 14px 0;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: 100px;
+}
+
+.segment-btn {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: 100px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.segment-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
+.list-cards.flush { padding: 0; gap: 12px; }
+.icon-chip { font-size: 18px; padding: 6px 11px; }
+
+/* Outfits in de mapkiezer hebben een collage in plaats van één foto */
+.collage.sel-thumb { aspect-ratio: auto; width: 74px; height: 92px; }
+
+/* — labels van mappen op een outfitkaart — */
+.pill-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 100px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pill-list.big { margin-top: 8px; }
+.pill-list.big .pill { font-size: 13px; padding: 6px 12px; }
+
+/* ─────────────── Meerdere foto's per kledingstuk + hoofdfoto ───────────── */
+
+.tile-media { position: relative; }
+
+.tile-count {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: rgba(20, 17, 15, .55);
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 100px;
+}
+
+.photo-strip, .gallery-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.photo-strip::-webkit-scrollbar, .gallery-strip::-webkit-scrollbar { display: none; }
+.photo-strip { padding: 4px 2px 8px; }
+.gallery-strip { padding: 10px 2px 0; }
+
+.photo-thumb {
+  position: relative;
+  width: 66px;
+  height: 82px;
+  flex: none;
+  cursor: pointer;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.photo-thumb .ph-img, .gallery-thumb .ph-img { border-radius: var(--radius-sm); }
+.photo-thumb.is-cover { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cover-mark {
+  position: absolute;
+  bottom: 4px;
+  left: 5px;
+  font-size: 13px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  opacity: 0;
+}
+
+.photo-thumb.is-cover .cover-mark { opacity: 1; }
+
+.thumb-x {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.photo-add {
+  width: 66px;
+  height: 82px;
+  flex: none;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.gallery-thumb {
+  position: relative;
+  width: 56px;
+  height: 70px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.gallery-thumb.is-active { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ──────────────── Rijen in de outfit- en mapkiezer ─────────────────────── */
+
+.sheet-list { padding: 12px 14px; }
+
+.assign-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 12px 8px 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+
+.assign-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+.assign-row .pick-mark { position: static; margin-left: auto; }
+.assign-row.selected .pick-mark { background: var(--accent); color: #fff; border-color: transparent; }
+.assign-icon { font-size: 24px; width: 46px; text-align: center; flex: none; }
+
+/* ───────────────────── Cijfers van Askim (1 t/m 10) ────────────────────── */
+
+.rate-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+  margin: 4px 0 10px;
+}
+
+.rate-btn {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rate-btn:active { transform: scale(.95); }
+.rate-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .rate-btn.active { color: #1d1712; } }
+
+.rate-label { font-size: 14px; font-weight: 600; text-align: center; margin: 12px 0 2px; }
+
+.tile-rating {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 100px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+
+@media (prefers-color-scheme: dark) { .tile-rating { color: #1d1712; } }
+
+/* ──────────────────────────── Sectie Mijn Askim ────────────────────────── */
+
+.askim-intro {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  background: var(--accent-soft);
+  padding: 9px 12px;
+  border-radius: var(--radius);
+}
+
+.askim-card {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.askim-card.done { text-align: center; padding: 26px 14px; }
+
+/* De foto mag de cijferknoppen niet van het scherm duwen: beoordelen moet
+   in één blik kunnen, zonder scrollen. */
+.askim-card .photo-frame { aspect-ratio: 3 / 4; max-height: 30dvh; margin: 0 auto 8px; }
+.askim-name { font-size: 18px; text-align: center; }
+.askim-card .rate-label { margin: 8px 0 2px; }
+.askim-card .row-actions { margin-top: 10px; }
+.hint.center { text-align: center; display: block; }
+.grid-small { grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0; }
+
+.by-askim {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 7px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.banner {
+  padding: 11px 13px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13.5px;
+}
+
+/* ─────────────────────────── Doneerstapel ──────────────────────────────── */
+
+.list-item.column { flex-direction: column; align-items: stretch; gap: 8px; }
+.list-line { display: flex; align-items: center; gap: 11px; }
+.row-actions.tight { margin-top: 0; }
+.row-actions.tight .btn { min-height: 38px; font-size: 14px; }
+
+/* ──────────────────── Dialoog met meerdere uitkomsten ──────────────────── */
+
+.choice-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.choice.primary { border-color: var(--accent); background: var(--accent-soft); }
+.choice b { font-size: 15px; }
+.choice span { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+.dialog-actions .btn-block { margin-top: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

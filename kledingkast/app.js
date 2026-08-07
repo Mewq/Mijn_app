@@ -57,6 +57,9 @@
     { key: 'date',      label: 'Date' }
   ];
 
+  /* Iconen voor mappen — puur om ze snel uit elkaar te houden. */
+  var FOLDER_ICONS = ['📁', '🛍️', '✈️', '💼', '🎉', '❄️', '☀️', '❤️', '👗', '🏋️'];
+
   /* Volgorde waarin "Verras me" een outfit opbouwt. */
   var SUGGEST_SLOTS = [
     { cats: ['tops', 'truien'], required: true },
@@ -82,11 +85,15 @@
   var state = {
     items: [],
     outfits: [],
+    folders: [],
     ready: false,
-    filters: { q: '', cat: '', season: '', color: '', fav: false, unworn: false, sort: 'recent' },
+    filters: { q: '', cat: '', season: '', color: '', fav: false, unworn: false, donate: false, sort: 'recent' },
     filtersOpen: false,
     draft: null,          // formuliergegevens tijdens bewerken
-    pickerSel: null       // selectie in de kledingkiezer
+    pickerSel: null,      // selectie in de kiezer
+    pickerMode: null,     // 'items' | 'outfits' | 'folders'
+    assignFor: null,      // outfit waarvoor we mappen aanvinken
+    askimSkipped: []      // deze sessie overgeslagen in de beoordeelrij
   };
 
   var els = {};
@@ -124,6 +131,8 @@
     if (diff > 1 && diff < 7) return diff + ' dagen geleden';
     return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
   }
+
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
   function toast(msg) {
     var t = els.toast;
@@ -253,17 +262,49 @@
     return {
       id: uid('itm'), name: '', category: 'tops', colors: [], seasons: [],
       brand: '', size: '', notes: '', favorite: false,
-      wearCount: 0, lastWorn: null, imageId: null,
+      wearCount: 0, lastWorn: null, imageIds: [], coverImageId: null,
+      rating: null,        // cijfer van Askim, 1 t/m 10
+      donate: false,       // ligt op de doneerstapel
       createdAt: Date.now(), updatedAt: Date.now()
     };
   }
 
-  function newOutfit() {
+  function newOutfit(author) {
     return {
       id: uid('out'), name: '', itemIds: [], occasion: 'dagelijks', seasons: [],
       notes: '', favorite: false, wearCount: 0, lastWorn: null,
+      author: author || 'ik',   // 'ik' of 'askim'
       createdAt: Date.now(), updatedAt: Date.now()
     };
+  }
+
+  function newFolder() {
+    return {
+      id: uid('fld'), name: '', icon: '📁', outfitIds: [], notes: '',
+      createdAt: Date.now(), updatedAt: Date.now()
+    };
+  }
+
+  /* Een kledingstuk kan meerdere foto's hebben; deze is de hoofdfoto die in
+     het overzicht en op outfits te zien is. */
+  function coverImageOf(item) {
+    var ids = item.imageIds || [];
+    if (!ids.length) return null;
+    if (item.coverImageId && ids.indexOf(item.coverImageId) !== -1) return item.coverImageId;
+    return ids[0];
+  }
+
+  /* Records uit een oudere versie (of een oude back-up) hadden één imageId. */
+  function normalizeItem(i) {
+    i.colors = i.colors || [];
+    i.seasons = i.seasons || [];
+    i.wearCount = i.wearCount || 0;
+    if (!i.imageIds) i.imageIds = i.imageId ? [i.imageId] : [];
+    if (!i.coverImageId) i.coverImageId = i.imageIds[0] || null;
+    if (i.rating === undefined) i.rating = null;
+    if (i.donate === undefined) i.donate = false;
+    delete i.imageId;
+    return i;
   }
 
   function getItem(id) {
@@ -274,6 +315,33 @@
   function getOutfit(id) {
     for (var i = 0; i < state.outfits.length; i++) if (state.outfits[i].id === id) return state.outfits[i];
     return null;
+  }
+
+  function getFolder(id) {
+    for (var i = 0; i < state.folders.length; i++) if (state.folders[i].id === id) return state.folders[i];
+    return null;
+  }
+
+  /* Mappen waar deze outfit in zit. */
+  function foldersOf(outfitId) {
+    return state.folders.filter(function (f) { return f.outfitIds.indexOf(outfitId) !== -1; });
+  }
+
+  /* De kledingstukken van alle outfits in een map, zonder dubbelingen —
+     genoeg voor het plaatje op de mapkaart. */
+  function folderItems(folder) {
+    var seen = {};
+    var out = [];
+    folder.outfitIds.forEach(function (oid) {
+      var o = getOutfit(oid);
+      if (!o) return;
+      o.itemIds.forEach(function (iid) {
+        if (seen[iid]) return;
+        var it = getItem(iid);
+        if (it) { seen[iid] = 1; out.push(it); }
+      });
+    });
+    return out;
   }
 
   function upsert(list, obj) {
@@ -295,12 +363,18 @@
     upsert(state.outfits, outfit);
   }
 
+  async function saveFolder(folder) {
+    folder.updatedAt = Date.now();
+    await KastDB.put(KastDB.FOLDERS, folder);
+    upsert(state.folders, folder);
+  }
+
   async function deleteItem(id) {
     var item = getItem(id);
     if (!item) return;
-    if (item.imageId) {
-      await KastDB.remove(KastDB.IMAGES, item.imageId);
-      forgetImage(item.imageId);
+    for (var n = 0; n < item.imageIds.length; n++) {
+      await KastDB.remove(KastDB.IMAGES, item.imageIds[n]);
+      forgetImage(item.imageIds[n]);
     }
     await KastDB.remove(KastDB.ITEMS, id);
     state.items = state.items.filter(function (i) { return i.id !== id; });
@@ -316,6 +390,19 @@
   async function deleteOutfit(id) {
     await KastDB.remove(KastDB.OUTFITS, id);
     state.outfits = state.outfits.filter(function (o) { return o.id !== id; });
+
+    // ... en niet als dode verwijzing in een map.
+    var touched = foldersOf(id);
+    for (var i = 0; i < touched.length; i++) {
+      touched[i].outfitIds = touched[i].outfitIds.filter(function (x) { return x !== id; });
+      await saveFolder(touched[i]);
+    }
+  }
+
+  /* Een map weggooien laat de outfits zelf staan; het is maar een verzameling. */
+  async function deleteFolder(id) {
+    await KastDB.remove(KastDB.FOLDERS, id);
+    state.folders = state.folders.filter(function (f) { return f.id !== id; });
   }
 
   async function markItemWorn(item) {
@@ -346,6 +433,8 @@
     var f = state.filters;
     var q = f.q.trim().toLowerCase();
     var list = state.items.filter(function (it) {
+      // Wat weggegeven wordt hoort niet meer in het dagelijkse overzicht.
+      if (!!it.donate !== !!f.donate) return false;
       if (f.cat && it.category !== f.cat) return false;
       if (f.color && (it.colors || []).indexOf(f.color) === -1) return false;
       if (!itemMatchesSeason(it, f.season)) return false;
@@ -365,6 +454,8 @@
       if (sort === 'name') return (a.name || 'zzz').localeCompare(b.name || 'zzz', 'nl');
       if (sort === 'worn') return (b.wearCount || 0) - (a.wearCount || 0);
       if (sort === 'unworn') return (a.wearCount || 0) - (b.wearCount || 0) || b.createdAt - a.createdAt;
+      // Zonder cijfer achteraan, zodat de favorieten van Askim bovenaan staan.
+      if (sort === 'rating') return (b.rating || -1) - (a.rating || -1) || b.createdAt - a.createdAt;
       return b.createdAt - a.createdAt;
     });
     return list;
@@ -372,7 +463,24 @@
 
   function activeFilterCount() {
     var f = state.filters;
-    return (f.season ? 1 : 0) + (f.color ? 1 : 0) + (f.fav ? 1 : 0) + (f.unworn ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+    return (f.season ? 1 : 0) + (f.color ? 1 : 0) + (f.fav ? 1 : 0) + (f.unworn ? 1 : 0) +
+      (f.donate ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+  }
+
+  function donateItems() {
+    return state.items.filter(function (i) { return i.donate; });
+  }
+
+  /* Stukken die Askim nog niet beoordeeld heeft (en deze sessie niet overslaat). */
+  function askimQueue() {
+    return state.items.filter(function (i) {
+      return !i.donate && (i.rating === null || i.rating === undefined) &&
+        state.askimSkipped.indexOf(i.id) === -1;
+    });
+  }
+
+  function askimOutfits() {
+    return state.outfits.filter(function (o) { return o.author === 'askim'; });
   }
 
   /* ──────────────────────────── Stukjes opmaak ───────────────────────────── */
@@ -382,9 +490,8 @@
     var tint = colorMap[(item.colors || [])[0]];
     var bg = tint && tint.hex.indexOf('gradient') === -1 ? tint.hex : '';
     var style = bg ? ' style="background:' + esc(bg) + '"' : '';
-    var photo = item.imageId
-      ? '<img class="ph-img" data-img="' + esc(item.imageId) + ':thumb" alt="">'
-      : '';
+    var cover = coverImageOf(item);
+    var photo = cover ? '<img class="ph-img" data-img="' + esc(cover) + ':thumb" alt="">' : '';
     return '<div class="' + (cls || 'tile-photo') + '">' +
              '<div class="ph-fallback"' + style + '><span>' + cat.icon + '</span></div>' +
              photo +
@@ -404,14 +511,14 @@
     opts = opts || {};
     var out = '';
     if (opts.allLabel) {
-      out += '<button class="chip' + (!selected ? ' active' : '') + '" data-act="' + act + '" data-val="">' +
+      out += '<button type="button" class="chip' + (!selected ? ' active' : '') + '" data-act="' + act + '" data-val="">' +
              esc(opts.allLabel) + '</button>';
     }
     out += list.map(function (o) {
       var isSel = Array.isArray(selected) ? selected.indexOf(o.key) !== -1 : selected === o.key;
       var swatch = o.hex ? '<i class="chip-swatch" style="background:' + esc(o.hex) + '"></i>' : '';
       var icon = o.icon ? o.icon + ' ' : '';
-      return '<button class="chip' + (isSel ? ' active' : '') + '" data-act="' + act + '" data-val="' + esc(o.key) + '">' +
+      return '<button type="button" class="chip' + (isSel ? ' active' : '') + '" data-act="' + act + '" data-val="' + esc(o.key) + '">' +
              swatch + icon + esc(o.label) + '</button>';
     }).join('');
     return out;
@@ -437,7 +544,9 @@
   function rootTab(parts) {
     if (parts[0] === 'kast' || parts[0] === 'item') return 'kast';
     if (parts[0] === 'outfits' || parts[0] === 'outfit') return 'outfits';
-    if (parts[0] === 'meer') return 'meer';
+    if (parts[0] === 'mappen' || parts[0] === 'map') return 'outfits';
+    if (parts[0] === 'askim') return 'askim';
+    if (parts[0] === 'meer' || parts[0] === 'doneren') return 'meer';
     return 'kast';
   }
 
@@ -458,9 +567,27 @@
         view = viewOutfits();
         break;
       case 'outfit':
-        if (parts[1] === 'new') { top = topBar('Nieuwe outfit', '#/outfits'); view = viewOutfitForm(null); }
+        if (parts[1] === 'new') { top = topBar('Nieuwe outfit', '#/outfits'); view = viewOutfitForm(null, 'ik'); }
+        else if (parts[1] === 'new-askim') { top = topBar('Outfit van Askim', '#/askim'); view = viewOutfitForm(null, 'askim'); }
         else if (parts[2] === 'edit') { top = topBar('Bewerken', '#/outfit/' + parts[1]); view = viewOutfitForm(parts[1]); }
         else { top = topBar('', '#/outfits'); view = viewOutfitDetail(parts[1]); }
+        break;
+      case 'askim':
+        top = topBar('Mijn Askim');
+        view = viewAskim();
+        break;
+      case 'doneren':
+        top = topBar('Doneren', '#/meer');
+        view = viewDoneren();
+        break;
+      case 'mappen':
+        top = topBar('Outfits', null, '<button class="icon-btn" data-act="new-folder" title="Nieuwe map">+</button>');
+        view = viewFolders();
+        break;
+      case 'map':
+        if (parts[1] === 'new') { top = topBar('Nieuwe map', '#/mappen'); view = viewFolderForm(null); }
+        else if (parts[2] === 'edit') { top = topBar('Map bewerken', '#/map/' + parts[1]); view = viewFolderForm(parts[1]); }
+        else { top = topBar('', '#/mappen'); view = viewFolderDetail(parts[1]); }
         break;
       case 'meer':
         top = topBar('Meer');
@@ -468,13 +595,14 @@
         break;
       default:
         top = topBar('Mijn kledingkast', null,
-          '<button class="icon-btn" data-act="bulk-add" title="Meerdere foto\'s toevoegen">⧉</button>' +
+          '<button class="icon-btn" data-act="bulk-add" title="Meerdere kledingstukken toevoegen">⧉</button>' +
           '<button class="icon-btn" data-act="new-item" title="Nieuw kledingstuk">+</button>');
         view = viewKast();
     }
 
     els.topbar.innerHTML = top;
     els.view.innerHTML = view;
+    els.view.setAttribute('data-route', parts[0]);
     els.tabbar.innerHTML = tabBar(rootTab(parts));
     hydrateImages(els.view);
   }
@@ -489,12 +617,20 @@
     var tabs = [
       { key: 'kast', href: '#/kast', icon: '🚪', label: 'Kast' },
       { key: 'outfits', href: '#/outfits', icon: '✨', label: 'Outfits' },
+      { key: 'askim', href: '#/askim', icon: '💛', label: 'Askim' },
       { key: 'meer', href: '#/meer', icon: '☰', label: 'Meer' }
     ];
     return tabs.map(function (t) {
       return '<a class="tab' + (t.key === active ? ' active' : '') + '" href="' + t.href + '">' +
         '<span class="tab-icon">' + t.icon + '</span><span class="tab-label">' + t.label + '</span></a>';
     }).join('');
+  }
+
+  function segment(active) {
+    return '<div class="segment">' +
+      '<a class="segment-btn' + (active === 'outfits' ? ' active' : '') + '" href="#/outfits">Outfits</a>' +
+      '<a class="segment-btn' + (active === 'mappen' ? ' active' : '') + '" href="#/mappen">Mappen</a>' +
+    '</div>';
   }
 
   /* ───────────────────────────────── Kast ────────────────────────────────── */
@@ -532,13 +668,15 @@
         '<div class="chips">' + chipRow(COLORS, f.color, 'filter-color', { allLabel: 'Alle' }) + '</div></div>' +
       '<div class="filter-group"><span class="filter-label">Tonen</span>' +
         '<div class="chips">' +
-          '<button class="chip' + (f.fav ? ' active' : '') + '" data-act="filter-fav">★ Favorieten</button>' +
-          '<button class="chip' + (f.unworn ? ' active' : '') + '" data-act="filter-unworn">Nooit gedragen</button>' +
+          '<button type="button" class="chip' + (f.fav ? ' active' : '') + '" data-act="filter-fav">★ Favorieten</button>' +
+          '<button type="button" class="chip' + (f.unworn ? ' active' : '') + '" data-act="filter-unworn">Nooit gedragen</button>' +
+          '<button type="button" class="chip' + (f.donate ? ' active' : '') + '" data-act="filter-donate">🎁 Doneerstapel</button>' +
         '</div></div>' +
       '<div class="filter-group"><span class="filter-label">Sorteren</span>' +
         '<div class="chips">' + chipRow([
           { key: 'recent', label: 'Nieuwste' },
           { key: 'name', label: 'Naam' },
+          { key: 'rating', label: '💛 Cijfer van Askim' },
           { key: 'worn', label: 'Meest gedragen' },
           { key: 'unworn', label: 'Minst gedragen' }
         ], f.sort, 'filter-sort') + '</div></div>' +
@@ -555,10 +693,15 @@
     }
     return list.map(function (it) {
       var cat = catMap[it.category] || catMap.overig;
+      var extra = (it.imageIds || []).length;
       return '<a class="tile" href="#/item/' + esc(it.id) + '">' +
-        itemThumb(it) +
-        (it.favorite ? '<span class="tile-fav">★</span>' : '') +
-        (!it.name ? '<span class="tile-badge">nog invullen</span>' : '') +
+        '<div class="tile-media">' +
+          itemThumb(it) +
+          (it.favorite ? '<span class="tile-fav">★</span>' : '') +
+          (extra > 1 ? '<span class="tile-count">' + extra + ' 📷</span>' : '') +
+          (it.rating ? '<span class="tile-rating">' + it.rating + '</span>' : '') +
+          (!it.name ? '<span class="tile-badge">nog invullen</span>' : '') +
+        '</div>' +
         '<div class="tile-body">' +
           '<span class="tile-name">' + esc(it.name || 'Naamloos') + '</span>' +
           '<span class="tile-meta">' + esc(cat.label) + colorDots(it.colors) + '</span>' +
@@ -581,6 +724,8 @@
 
     var cat = catMap[it.category] || catMap.overig;
     var inOutfits = state.outfits.filter(function (o) { return o.itemIds.indexOf(it.id) !== -1; });
+    var cover = coverImageOf(it);
+    var ids = it.imageIds || [];
 
     var rows = '';
     rows += metaRow('Categorie', cat.icon + ' ' + cat.label);
@@ -594,9 +739,25 @@
     if (it.size) rows += metaRow('Maat', it.size);
     rows += metaRow('Gedragen', (it.wearCount || 0) + ' keer' +
       (it.lastWorn ? ' · laatst ' + formatDate(it.lastWorn) : ''));
+    rows += metaRow('Cijfer van Askim', it.rating ? it.rating + ' / 10' : 'nog geen cijfer');
+
+    // Meer dan één foto? Dan een strookje eronder om doorheen te bladeren.
+    var gallery = ids.length > 1
+      ? '<div class="gallery-strip scroll-x">' + ids.map(function (imgId) {
+          return '<button type="button" class="gallery-thumb' + (imgId === cover ? ' is-active' : '') + '" ' +
+            'data-act="show-photo" data-id="' + esc(imgId) + '">' +
+            '<img class="ph-img" data-img="' + esc(imgId) + ':thumb" alt=""></button>';
+        }).join('') + '</div>'
+      : '';
 
     return '<div class="detail">' +
-      '<div class="detail-photo">' + itemThumb(it, 'photo-frame') + '</div>' +
+      '<div class="detail-photo">' +
+        '<div class="photo-frame">' +
+          '<div class="ph-fallback"><span>' + cat.icon + '</span></div>' +
+          (cover ? '<img id="detailPhoto" class="ph-img" data-img="' + esc(cover) + ':full" alt="">' : '') +
+        '</div>' +
+        gallery +
+      '</div>' +
       '<div class="detail-body">' +
         '<div class="detail-head">' +
           '<h2 class="detail-title">' + esc(it.name || 'Naamloos') + '</h2>' +
@@ -605,7 +766,17 @@
         '</div>' +
         '<div class="meta-list">' + rows + '</div>' +
         (it.notes ? '<p class="notes">' + esc(it.notes) + '</p>' : '') +
-        '<button class="btn btn-primary btn-block" data-act="wear-item" data-id="' + esc(it.id) + '">Vandaag gedragen</button>' +
+        (it.donate
+          ? '<div class="banner">🎁 Dit stuk ligt op de doneerstapel.</div>' +
+            '<button class="btn btn-secondary btn-block" data-act="undonate-item" data-id="' + esc(it.id) + '">Terug in de kast</button>'
+          : '<button class="btn btn-primary btn-block" data-act="wear-item" data-id="' + esc(it.id) + '">Vandaag gedragen</button>') +
+
+        '<h3 class="section-title">Cijfer van Askim</h3>' +
+        ratingRow(it) +
+        (!it.donate
+          ? '<button class="btn btn-ghost btn-block" data-act="donate-item" data-id="' + esc(it.id) + '">🎁 Naar de doneerstapel</button>'
+          : '') +
+
         (inOutfits.length
           ? '<h3 class="section-title">In outfits (' + inOutfits.length + ')</h3>' +
             '<div class="list">' + inOutfits.map(outfitRowHtml).join('') + '</div>'
@@ -621,6 +792,18 @@
     return '<div class="meta-row"><span class="meta-key">' + esc(key) + '</span><span class="meta-val">' + esc(val) + '</span></div>';
   }
 
+  /* Knoppen 1 t/m 10 waarmee Askim een kledingstuk een cijfer geeft. */
+  function ratingRow(it) {
+    var buttons = '';
+    for (var n = 1; n <= 10; n++) {
+      buttons += '<button type="button" class="rate-btn' + (it.rating === n ? ' active' : '') + '" ' +
+        'data-act="rate-item" data-id="' + esc(it.id) + '" data-val="' + n + '">' + n + '</button>';
+    }
+    return '<div class="rate-row">' + buttons + '</div>' +
+      (it.rating ? '<button type="button" class="btn btn-ghost btn-block" data-act="rate-item" ' +
+        'data-id="' + esc(it.id) + '" data-val="">Cijfer wissen</button>' : '');
+  }
+
   /* ─────────────────────────── Kledingstuk-formulier ─────────────────────── */
 
   function viewItemForm(id) {
@@ -631,30 +814,53 @@
       var base = existing ? JSON.parse(JSON.stringify(existing)) : newItem();
       state.draft = {
         kind: 'item', id: existing ? existing.id : 'new', data: base,
-        newImage: null, previewUrl: '', removeImage: false
+        // photos: {id, url} — url alleen bij net gekozen foto's; blobs pas bij opslaan naar de database
+        photos: (base.imageIds || []).map(function (imgId) { return { id: imgId, url: '', blobs: null }; }),
+        cover: coverImageOf(base),
+        removed: []
       };
     }
     var d = state.draft;
     var it = d.data;
+    var coverPhoto = null;
+    d.photos.forEach(function (p) { if (p.id === d.cover) coverPhoto = p; });
+    if (!coverPhoto) coverPhoto = d.photos[0] || null;
 
-    var previewHtml;
-    if (d.previewUrl) {
-      previewHtml = '<img class="ph-img loaded" src="' + esc(d.previewUrl) + '" alt="">';
-    } else if (it.imageId && !d.removeImage) {
-      previewHtml = '<img class="ph-img" data-img="' + esc(it.imageId) + ':full" alt="">';
-    } else {
-      previewHtml = '';
+    var coverHtml = '';
+    if (coverPhoto) {
+      coverHtml = coverPhoto.url
+        ? '<img class="ph-img loaded" src="' + esc(coverPhoto.url) + '" alt="">'
+        : '<img class="ph-img" data-img="' + esc(coverPhoto.id) + ':full" alt="">';
     }
-    var hasPhoto = !!(d.previewUrl || (it.imageId && !d.removeImage));
+
+    var strip = d.photos.map(function (p) {
+      var img = p.url
+        ? '<img class="ph-img loaded" src="' + esc(p.url) + '" alt="">'
+        : '<img class="ph-img" data-img="' + esc(p.id) + ':thumb" alt="">';
+      return '<div class="photo-thumb' + (p.id === (coverPhoto && coverPhoto.id) ? ' is-cover' : '') + '" ' +
+        'data-act="set-cover" data-id="' + esc(p.id) + '">' +
+        img +
+        '<span class="cover-mark">★</span>' +
+        '<button type="button" class="thumb-x" data-act="drop-photo" data-id="' + esc(p.id) + '" aria-label="Foto verwijderen">×</button>' +
+      '</div>';
+    }).join('');
 
     return '<form class="form" id="itemForm" novalidate>' +
       '<button type="button" class="photo-picker" data-act="pick-photo">' +
-        '<div class="photo-frame' + (d.previewUrl ? ' has-photo' : '') + '">' +
-          '<div class="ph-fallback"><span>📷</span></div>' + previewHtml +
+        '<div class="photo-frame' + (coverPhoto && coverPhoto.url ? ' has-photo' : '') + '">' +
+          '<div class="ph-fallback"><span>📷</span></div>' + coverHtml +
         '</div>' +
-        '<span class="photo-hint">' + (hasPhoto ? 'Foto vervangen' : 'Foto toevoegen') + '</span>' +
+        '<span class="photo-hint">' + (d.photos.length ? 'Foto\'s toevoegen' : 'Foto toevoegen') + '</span>' +
       '</button>' +
-      (hasPhoto ? '<button type="button" class="btn btn-ghost btn-block" data-act="remove-photo">Foto verwijderen</button>' : '') +
+
+      (d.photos.length
+        ? '<div class="photo-strip scroll-x">' + strip +
+            '<button type="button" class="photo-add" data-act="pick-photo" aria-label="Foto toevoegen">+</button>' +
+          '</div>' +
+          '<p class="hint block">' + (d.photos.length > 1
+            ? 'Tik op een foto om die als hoofdfoto te kiezen — die zie je in de kast en op outfits.'
+            : 'Voeg gerust meer foto\'s toe; de foto met ★ is de hoofdfoto.') + '</p>'
+        : '') +
 
       '<div class="field"><label for="f-name">Naam</label>' +
         '<input id="f-name" class="input" type="text" value="' + esc(it.name) + '" placeholder="Bijv. zwarte coltrui" autocomplete="off"></div>' +
@@ -704,19 +910,20 @@
     var d = state.draft;
     var it = d.data;
 
-    if (!it.name) it.name = ''; // naamloos mag; de kast toont dan "nog invullen"
+    for (var r = 0; r < d.removed.length; r++) {
+      await KastDB.remove(KastDB.IMAGES, d.removed[r]);
+      forgetImage(d.removed[r]);
+    }
+    for (var p = 0; p < d.photos.length; p++) {
+      var ph = d.photos[p];
+      if (!ph.blobs) continue;
+      await KastDB.put(KastDB.IMAGES, { id: ph.id, full: ph.blobs.full, thumb: ph.blobs.thumb });
+      forgetImage(ph.id);
+    }
 
-    if (d.removeImage && it.imageId && !d.newImage) {
-      await KastDB.remove(KastDB.IMAGES, it.imageId);
-      forgetImage(it.imageId);
-      it.imageId = null;
-    }
-    if (d.newImage) {
-      var imgId = it.imageId || uid('img');
-      await KastDB.put(KastDB.IMAGES, { id: imgId, full: d.newImage.full, thumb: d.newImage.thumb });
-      forgetImage(imgId);
-      it.imageId = imgId;
-    }
+    it.imageIds = d.photos.map(function (x) { return x.id; });
+    it.coverImageId = (d.cover && it.imageIds.indexOf(d.cover) !== -1) ? d.cover : (it.imageIds[0] || null);
+
     await saveItem(it);
     clearDraft();
     toast('Opgeslagen');
@@ -724,7 +931,9 @@
   }
 
   function clearDraft() {
-    if (state.draft && state.draft.previewUrl) URL.revokeObjectURL(state.draft.previewUrl);
+    if (state.draft && state.draft.photos) {
+      state.draft.photos.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
+    }
     state.draft = null;
   }
 
@@ -732,7 +941,7 @@
 
   function viewOutfits() {
     if (!state.outfits.length) {
-      return emptyState('✨', 'Nog geen outfits',
+      return segment('outfits') + emptyState('✨', 'Nog geen outfits',
         state.items.length
           ? 'Combineer kledingstukken uit je kast tot een outfit die je later zo terugvindt.'
           : 'Voeg eerst wat kleding toe aan je kast, dan kun je die hier combineren.',
@@ -741,19 +950,25 @@
           : '<button class="btn btn-primary" data-act="new-item">Kledingstuk toevoegen</button>');
     }
     var sorted = state.outfits.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt; });
-    return '<div class="list list-cards">' + sorted.map(outfitCardHtml).join('') + '</div>';
+    return segment('outfits') + '<div class="list list-cards">' + sorted.map(outfitCardHtml).join('') + '</div>';
   }
 
   function outfitCardHtml(o) {
     var items = o.itemIds.map(getItem).filter(Boolean);
     var occ = occasionMap[o.occasion];
+    var mappen = foldersOf(o.id);
     return '<a class="outfit-card" href="#/outfit/' + esc(o.id) + '">' +
       collageHtml(items) +
       '<div class="outfit-body">' +
-        '<span class="outfit-name">' + esc(o.name || 'Naamloze outfit') + (o.favorite ? ' <span class="star-inline">★</span>' : '') + '</span>' +
-        '<span class="outfit-meta">' + items.length + ' stuk' + (items.length === 1 ? '' : 'ken') +
+        '<span class="outfit-name">' + esc(o.name || 'Naamloze outfit') +
+          (o.author === 'askim' ? ' <span class="by-askim">💛 Askim</span>' : '') +
+          (o.favorite ? ' <span class="star-inline">★</span>' : '') + '</span>' +
+        '<span class="outfit-meta">' + plural(items.length, 'stuk', 'stukken') +
           (occ ? ' · ' + esc(occ.label) : '') +
           (o.wearCount ? ' · ' + o.wearCount + '× gedragen' : '') + '</span>' +
+        (mappen.length ? '<span class="pill-list">' + mappen.map(function (f) {
+          return '<span class="pill">' + f.icon + ' ' + esc(f.name || 'Naamloze map') + '</span>';
+        }).join('') + '</span>' : '') +
       '</div></a>';
   }
 
@@ -762,7 +977,7 @@
     return '<a class="list-item" href="#/outfit/' + esc(o.id) + '">' +
       collageHtml(items, 'collage small') +
       '<span class="list-text"><b>' + esc(o.name || 'Naamloze outfit') + '</b>' +
-      '<span class="list-sub">' + items.length + ' stuk' + (items.length === 1 ? '' : 'ken') + '</span></span>' +
+      '<span class="list-sub">' + plural(items.length, 'stuk', 'stukken') + '</span></span>' +
       '<span class="chev">›</span></a>';
   }
 
@@ -780,6 +995,7 @@
     if (!o) return emptyState('🤔', 'Niet gevonden', 'Deze outfit bestaat niet meer.', '<a class="btn btn-primary" href="#/outfits">Naar outfits</a>');
     var items = o.itemIds.map(getItem).filter(Boolean);
     var occ = occasionMap[o.occasion];
+    var mappen = foldersOf(o.id);
 
     return '<div class="detail">' +
       '<div class="detail-photo">' + collageHtml(items, 'collage big') + '</div>' +
@@ -798,6 +1014,15 @@
         '</div>' +
         (o.notes ? '<p class="notes">' + esc(o.notes) + '</p>' : '') +
         '<button class="btn btn-primary btn-block" data-act="wear-outfit" data-id="' + esc(o.id) + '">Vandaag gedragen</button>' +
+
+        '<h3 class="section-title">Mappen</h3>' +
+        (mappen.length
+          ? '<div class="pill-list big">' + mappen.map(function (f) {
+              return '<a class="pill" href="#/map/' + esc(f.id) + '">' + f.icon + ' ' + esc(f.name || 'Naamloze map') + '</a>';
+            }).join('') + '</div>'
+          : '<p class="hint block">Deze outfit zit nog in geen enkele map.</p>') +
+        '<button class="btn btn-secondary btn-block" data-act="assign-folders" data-id="' + esc(o.id) + '">In een map zetten</button>' +
+
         '<h3 class="section-title">Kledingstukken (' + items.length + ')</h3>' +
         (items.length
           ? '<div class="list">' + items.map(function (it) {
@@ -816,14 +1041,14 @@
       '</div></div>';
   }
 
-  function viewOutfitForm(id) {
+  function viewOutfitForm(id, author) {
     var existing = id ? getOutfit(id) : null;
     if (id && !existing) return emptyState('🤔', 'Niet gevonden', 'Deze outfit bestaat niet meer.', '<a class="btn btn-primary" href="#/outfits">Naar outfits</a>');
 
     if (!state.draft || state.draft.kind !== 'outfit' || state.draft.id !== (existing ? existing.id : 'new')) {
       state.draft = {
         kind: 'outfit', id: existing ? existing.id : 'new',
-        data: existing ? JSON.parse(JSON.stringify(existing)) : newOutfit()
+        data: existing ? JSON.parse(JSON.stringify(existing)) : newOutfit(author)
       };
     }
     var o = state.draft.data;
@@ -912,18 +1137,264 @@
     render();
   }
 
-  /* ───────────────────────────── Kledingkiezer ───────────────────────────── */
+  /* ─────────────────────────────────  Mappen ─────────────────────────────── */
+
+  function viewFolders() {
+    if (!state.folders.length) {
+      return segment('mappen') + emptyState('📁', 'Nog geen mappen',
+        'In een map verzamel je outfits die bij elkaar horen. Bijvoorbeeld "Nog kopen" ' +
+        'voor outfits die je nog wilt aanschaffen, of "Vakantie Italië".',
+        '<button class="btn btn-primary" data-act="new-folder">Map maken</button>');
+    }
+    var sorted = state.folders.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+    return segment('mappen') + '<div class="list list-cards">' + sorted.map(folderCardHtml).join('') + '</div>';
+  }
+
+  function folderCardHtml(f) {
+    return '<a class="outfit-card" href="#/map/' + esc(f.id) + '">' +
+      collageHtml(folderItems(f)) +
+      '<div class="outfit-body">' +
+        '<span class="outfit-name">' + f.icon + ' ' + esc(f.name || 'Naamloze map') + '</span>' +
+        '<span class="outfit-meta">' + plural(f.outfitIds.length, 'outfit', 'outfits') + '</span>' +
+      '</div></a>';
+  }
+
+  function viewFolderDetail(id) {
+    var f = getFolder(id);
+    if (!f) return emptyState('🤔', 'Niet gevonden', 'Deze map bestaat niet meer.', '<a class="btn btn-primary" href="#/mappen">Naar mappen</a>');
+    var outfits = f.outfitIds.map(getOutfit).filter(Boolean);
+
+    return '<div class="detail">' +
+      '<div class="detail-photo">' + collageHtml(folderItems(f), 'collage big') + '</div>' +
+      '<div class="detail-body">' +
+        '<div class="detail-head">' +
+          '<h2 class="detail-title">' + f.icon + ' ' + esc(f.name || 'Naamloze map') + '</h2>' +
+        '</div>' +
+        (f.notes ? '<p class="notes">' + esc(f.notes) + '</p>' : '') +
+        '<h3 class="section-title">Outfits (' + outfits.length + ')</h3>' +
+        (outfits.length
+          ? '<div class="list list-cards flush">' + outfits.map(outfitCardHtml).join('') + '</div>'
+          : '<p class="hint block">Deze map is nog leeg. Kies via "Bewerken" welke outfits erin horen.</p>') +
+        '<div class="row-actions">' +
+          '<a class="btn btn-secondary" href="#/map/' + esc(f.id) + '/edit">Bewerken</a>' +
+          '<button class="btn btn-danger" data-act="delete-folder" data-id="' + esc(f.id) + '">Verwijderen</button>' +
+        '</div>' +
+      '</div></div>';
+  }
+
+  function viewFolderForm(id) {
+    var existing = id ? getFolder(id) : null;
+    if (id && !existing) return emptyState('🤔', 'Niet gevonden', 'Deze map bestaat niet meer.', '<a class="btn btn-primary" href="#/mappen">Naar mappen</a>');
+
+    if (!state.draft || state.draft.kind !== 'folder' || state.draft.id !== (existing ? existing.id : 'new')) {
+      state.draft = {
+        kind: 'folder', id: existing ? existing.id : 'new',
+        data: existing ? JSON.parse(JSON.stringify(existing)) : newFolder()
+      };
+    }
+    var f = state.draft.data;
+    var chosen = f.outfitIds.map(getOutfit).filter(Boolean);
+
+    return '<form class="form" id="folderForm" novalidate>' +
+      '<div class="field"><label for="m-name">Naam</label>' +
+        '<input id="m-name" class="input" type="text" value="' + esc(f.name) + '" placeholder="Bijv. nog kopen" autocomplete="off"></div>' +
+
+      '<div class="field"><label>Icoon</label>' +
+        '<div class="chips">' + FOLDER_ICONS.map(function (ic) {
+          return '<button type="button" class="chip icon-chip' + (ic === f.icon ? ' active' : '') + '" ' +
+            'data-act="draft-folder-icon" data-val="' + esc(ic) + '">' + ic + '</button>';
+        }).join('') + '</div></div>' +
+
+      '<div class="field"><label>Outfits <span class="hint">(' + chosen.length + ' gekozen)</span></label>' +
+        (chosen.length
+          ? '<div class="sel-strip scroll-x">' + chosen.map(function (o) {
+              return '<div class="sel-chip">' + collageHtml(o.itemIds.map(getItem).filter(Boolean), 'collage sel-thumb') +
+                '<span class="sel-name">' + esc(o.name || 'Naamloos') + '</span>' +
+                '<button type="button" class="sel-x" data-act="unpick-outfit" data-id="' + esc(o.id) + '" aria-label="Verwijderen">×</button>' +
+              '</div>';
+            }).join('') + '</div>'
+          : '<p class="hint block">Nog geen outfits in deze map.</p>') +
+        '<button type="button" class="btn btn-secondary btn-block" data-act="open-picker">Outfits kiezen</button>' +
+      '</div>' +
+
+      '<div class="field"><label for="m-notes">Notities</label>' +
+        '<textarea id="m-notes" class="input textarea" rows="3" placeholder="Waar is deze map voor?">' + esc(f.notes) + '</textarea></div>' +
+
+      '<div class="form-actions">' +
+        '<button type="button" class="btn btn-secondary" data-act="cancel-form">Annuleren</button>' +
+        '<button type="button" class="btn btn-primary" data-act="save-folder">Opslaan</button>' +
+      '</div>' +
+    '</form>';
+  }
+
+  function syncFolderDraftFromDom() {
+    var d = state.draft;
+    if (!d || d.kind !== 'folder') return;
+    var name = document.getElementById('m-name');
+    var notes = document.getElementById('m-notes');
+    if (name) d.data.name = name.value.trim();
+    if (notes) d.data.notes = notes.value.trim();
+  }
+
+  async function commitFolder() {
+    syncFolderDraftFromDom();
+    var f = state.draft.data;
+    if (!f.name) {
+      toast('Geef de map eerst een naam');
+      return;
+    }
+    await saveFolder(f);
+    clearDraft();
+    toast('Map opgeslagen');
+    go('#/map/' + f.id);
+  }
+
+  /* ────────────────────────────── Mijn Askim ─────────────────────────────── */
+
+  function viewAskim() {
+    var queue = askimQueue();
+    var hers = askimOutfits();
+    var donate = donateItems();
+    var top = state.items.filter(function (i) { return i.rating && !i.donate; })
+      .sort(function (a, b) { return b.rating - a.rating; }).slice(0, 6);
+
+    return '<div class="page">' +
+      '<p class="askim-intro">Geef cijfers, stel je eigen outfits samen en leg spullen op de doneerstapel.</p>' +
+
+      '<h3 class="section-title">Beoordelen</h3>' +
+      (queue.length ? askimQueueCard(queue) : askimDoneCard()) +
+
+      (top.length
+        ? '<h3 class="section-title">Jouw hoogste cijfers</h3>' +
+          '<div class="grid grid-small">' + top.map(function (it) {
+            return '<a class="tile" href="#/item/' + esc(it.id) + '">' +
+              '<div class="tile-media">' + itemThumb(it) +
+                '<span class="tile-rating">' + it.rating + '</span></div>' +
+              '<div class="tile-body"><span class="tile-name">' + esc(it.name || 'Naamloos') + '</span></div>' +
+            '</a>';
+          }).join('') + '</div>'
+        : '') +
+
+      '<h3 class="section-title">Jouw outfits (' + hers.length + ')</h3>' +
+      (hers.length
+        ? '<div class="list list-cards flush">' + hers.map(outfitCardHtml).join('') + '</div>'
+        : '<p class="hint block">Je hebt nog geen outfits samengesteld.</p>') +
+      '<button class="btn btn-primary btn-block" data-act="new-outfit-askim">Outfit samenstellen</button>' +
+
+      '<h3 class="section-title">Doneerstapel</h3>' +
+      '<p class="hint block">' + (donate.length
+        ? plural(donate.length, 'kledingstuk ligt', 'kledingstukken liggen') + ' klaar om weg te geven.'
+        : 'Nog niets om weg te geven.') + '</p>' +
+      '<a class="btn btn-secondary btn-block" href="#/doneren">🎁 Doneerstapel bekijken</a>' +
+    '</div>';
+  }
+
+  function askimQueueCard(queue) {
+    var it = queue[0];
+    var cat = catMap[it.category] || catMap.overig;
+    return '<div class="askim-card">' +
+      itemThumb(it, 'photo-frame') +
+      '<h4 class="askim-name">' + esc(it.name || 'Naamloos') + '</h4>' +
+      '<p class="hint center">' + esc(cat.label) + (it.brand ? ' · ' + esc(it.brand) : '') + '</p>' +
+      '<p class="rate-label">Hoe leuk vind je dit?</p>' +
+      ratingRow(it) +
+      '<div class="row-actions">' +
+        '<button type="button" class="btn btn-secondary" data-act="skip-askim" data-id="' + esc(it.id) + '">Sla over</button>' +
+        '<button type="button" class="btn btn-ghost" data-act="donate-item" data-id="' + esc(it.id) + '">🎁 Doneren</button>' +
+      '</div>' +
+      '<p class="hint center">Nog ' + plural(queue.length, 'stuk', 'stukken') + ' te gaan</p>' +
+    '</div>';
+  }
+
+  function askimDoneCard() {
+    var skipped = state.askimSkipped.length;
+    return '<div class="askim-card done">' +
+      '<div class="empty-icon">💛</div>' +
+      '<p class="empty-text">' + (state.items.length
+        ? 'Je hebt alles beoordeeld. Lief van je!'
+        : 'Er staat nog geen kleding in de kast om te beoordelen.') + '</p>' +
+      (skipped
+        ? '<button class="btn btn-ghost" data-act="askim-unskip">Overgeslagen stukken opnieuw tonen (' + skipped + ')</button>'
+        : '') +
+    '</div>';
+  }
+
+  /* ──────────────────────────────── Doneren ──────────────────────────────── */
+
+  function viewDoneren() {
+    var list = donateItems();
+    if (!list.length) {
+      return emptyState('🎁', 'Doneerstapel is leeg',
+        'Kleding die je niet meer draagt kun je vanaf het kledingstuk zelf op deze stapel leggen. ' +
+        'Zo blijft je kast overzichtelijk zonder dat je meteen iets weggooit.',
+        '<a class="btn btn-primary" href="#/kast">Naar de kast</a>');
+    }
+    return '<div class="page">' +
+      '<p class="hint block">' + plural(list.length, 'kledingstuk ligt', 'kledingstukken liggen') +
+        ' klaar om weg te geven. Ze tellen niet meer mee in je kast.</p>' +
+      '<div class="list">' + list.map(function (it) {
+        var cat = catMap[it.category] || catMap.overig;
+        return '<div class="list-item column">' +
+          '<a class="list-line" href="#/item/' + esc(it.id) + '">' +
+            itemThumb(it, 'list-thumb') +
+            '<span class="list-text"><b>' + esc(it.name || 'Naamloos') + '</b>' +
+            '<span class="list-sub">' + esc(cat.label) +
+              (it.rating ? ' · cijfer ' + it.rating : '') + '</span></span>' +
+            '<span class="chev">›</span>' +
+          '</a>' +
+          '<div class="row-actions tight">' +
+            '<button class="btn btn-secondary" data-act="undonate-item" data-id="' + esc(it.id) + '">Terug in de kast</button>' +
+            '<button class="btn btn-danger" data-act="delete-item" data-id="' + esc(it.id) + '">Definitief weg</button>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div></div>';
+  }
+
+  /* ─────────────────────────────── Kiezers ───────────────────────────────── */
 
   function openPicker() {
-    syncOutfitDraftFromDom();
-    state.pickerSel = state.draft.data.itemIds.slice();
-    els.overlay.innerHTML = pickerHtml();
+    var d = state.draft;
+    if (!d) return;
+    if (d.kind === 'outfit') {
+      syncOutfitDraftFromDom();
+      state.pickerMode = 'items';
+      state.pickerSel = d.data.itemIds.slice();
+      showSheet('Kleding kiezen', itemPickerBody());
+    } else if (d.kind === 'folder') {
+      syncFolderDraftFromDom();
+      state.pickerMode = 'outfits';
+      state.pickerSel = d.data.outfitIds.slice();
+      showSheet('Outfits kiezen', outfitPickerBody());
+    }
+  }
+
+  function openFolderAssign(outfitId) {
+    if (!state.folders.length) {
+      toast('Maak eerst een map aan');
+      go('#/map/new');
+      return;
+    }
+    state.pickerMode = 'folders';
+    state.assignFor = outfitId;
+    state.pickerSel = foldersOf(outfitId).map(function (f) { return f.id; });
+    showSheet('In een map zetten', folderPickerBody());
+  }
+
+  function showSheet(title, body) {
+    els.overlay.innerHTML = '<div class="sheet">' +
+      '<div class="sheet-head"><h3>' + esc(title) + '</h3>' +
+        '<button class="icon-btn" data-act="picker-close" aria-label="Sluiten">×</button></div>' +
+      '<div class="sheet-body">' + body + '</div>' +
+      '<div class="sheet-foot">' +
+        '<button class="btn btn-primary btn-block" data-act="picker-done">' +
+          'Klaar (<span id="pickCount">' + state.pickerSel.length + '</span>)</button>' +
+      '</div></div>';
     els.overlay.hidden = false;
     document.body.classList.add('locked');
     hydrateImages(els.overlay);
   }
 
-  function pickerHtml() {
+  function itemPickerBody() {
     var byCat = {};
     state.items.forEach(function (it) {
       (byCat[it.category] = byCat[it.category] || []).push(it);
@@ -940,17 +1411,57 @@
             '</button>';
           }).join('') + '</div>';
       }).join('');
+    return body || '<p class="empty-text">Je kast is nog leeg. Voeg eerst kleding toe.</p>';
+  }
 
-    if (!body) body = '<p class="empty-text">Je kast is nog leeg. Voeg eerst kleding toe.</p>';
+  function outfitPickerBody() {
+    if (!state.outfits.length) {
+      return '<p class="empty-text">Je hebt nog geen outfits. Maak er eerst een.</p>';
+    }
+    var sorted = state.outfits.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+    return '<div class="list sheet-list">' + sorted.map(function (o) {
+      var sel = state.pickerSel.indexOf(o.id) !== -1;
+      var items = o.itemIds.map(getItem).filter(Boolean);
+      return '<div class="assign-row' + (sel ? ' selected' : '') + '" data-act="picker-toggle" data-id="' + esc(o.id) + '">' +
+        collageHtml(items, 'collage small') +
+        '<span class="list-text"><b>' + esc(o.name || 'Naamloze outfit') + '</b>' +
+        '<span class="list-sub">' + plural(items.length, 'stuk', 'stukken') + '</span></span>' +
+        '<span class="pick-mark">✓</span></div>';
+    }).join('') + '</div>';
+  }
 
-    return '<div class="sheet">' +
-      '<div class="sheet-head"><h3>Kleding kiezen</h3>' +
-        '<button class="icon-btn" data-act="picker-close" aria-label="Sluiten">×</button></div>' +
-      '<div class="sheet-body">' + body + '</div>' +
-      '<div class="sheet-foot">' +
-        '<button class="btn btn-primary btn-block" data-act="picker-done">' +
-          'Klaar (<span id="pickCount">' + state.pickerSel.length + '</span>)</button>' +
-      '</div></div>';
+  function folderPickerBody() {
+    return '<div class="list sheet-list">' + state.folders.map(function (f) {
+      var sel = state.pickerSel.indexOf(f.id) !== -1;
+      return '<div class="assign-row' + (sel ? ' selected' : '') + '" data-act="picker-toggle" data-id="' + esc(f.id) + '">' +
+        '<span class="assign-icon">' + f.icon + '</span>' +
+        '<span class="list-text"><b>' + esc(f.name || 'Naamloze map') + '</b>' +
+        '<span class="list-sub">' + plural(f.outfitIds.length, 'outfit', 'outfits') + '</span></span>' +
+        '<span class="pick-mark">✓</span></div>';
+    }).join('') + '</div>' +
+    '<button class="btn btn-ghost btn-block" data-act="new-folder-from-sheet">+ Nieuwe map</button>';
+  }
+
+  async function applyPicker() {
+    if (state.pickerMode === 'items') {
+      state.draft.data.itemIds = state.pickerSel.slice();
+    } else if (state.pickerMode === 'outfits') {
+      state.draft.data.outfitIds = state.pickerSel.slice();
+    } else if (state.pickerMode === 'folders') {
+      var outfitId = state.assignFor;
+      for (var i = 0; i < state.folders.length; i++) {
+        var f = state.folders[i];
+        var has = f.outfitIds.indexOf(outfitId) !== -1;
+        var want = state.pickerSel.indexOf(f.id) !== -1;
+        if (has === want) continue;
+        f.outfitIds = want
+          ? f.outfitIds.concat([outfitId])
+          : f.outfitIds.filter(function (x) { return x !== outfitId; });
+        await saveFolder(f);
+      }
+    }
+    closeOverlay();
+    render();
   }
 
   function closeOverlay() {
@@ -962,8 +1473,10 @@
   /* ─────────────────────────────── Meer / back-up ────────────────────────── */
 
   function viewMeer() {
-    var items = state.items;
-    var totalWorn = items.reduce(function (s, i) { return s + (i.wearCount || 0); }, 0);
+    // De doneerstapel telt niet mee als "in de kast".
+    var items = state.items.filter(function (i) { return !i.donate; });
+    var donate = donateItems();
+    var totalWorn = state.items.reduce(function (s, i) { return s + (i.wearCount || 0); }, 0);
     var never = items.filter(function (i) { return !(i.wearCount > 0); }).length;
     var mostWorn = items.slice().sort(function (a, b) { return (b.wearCount || 0) - (a.wearCount || 0); }).slice(0, 5)
       .filter(function (i) { return (i.wearCount || 0) > 0; });
@@ -981,9 +1494,16 @@
       '<div class="stat-grid">' +
         stat(items.length, 'kledingstukken') +
         stat(state.outfits.length, 'outfits') +
+        stat(state.folders.length, 'mappen') +
+        stat(donate.length, 'op de doneerstapel') +
         stat(totalWorn, 'keer gedragen') +
         stat(never, 'nooit gedragen') +
       '</div>' +
+
+      '<h3 class="section-title">Doneren</h3>' +
+      '<p class="hint block">Kleding die je niet meer draagt leg je op de doneerstapel. ' +
+        'Die verdwijnt uit je kast, maar blijft bewaard tot je hem echt weggeeft.</p>' +
+      '<a class="btn btn-secondary btn-block" href="#/doneren">🎁 Doneerstapel (' + donate.length + ')</a>' +
 
       (bars ? '<h3 class="section-title">Per categorie</h3><div class="bars">' + bars + '</div>' : '') +
 
@@ -1024,8 +1544,8 @@
       });
     }
     var payload = {
-      app: 'kledingkast', version: 1, exportedAt: new Date().toISOString(),
-      items: state.items, outfits: state.outfits, images: out
+      app: 'kledingkast', version: 2, exportedAt: new Date().toISOString(),
+      items: state.items, outfits: state.outfits, folders: state.folders, images: out
     };
     var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
@@ -1047,13 +1567,31 @@
       toast('Dit is geen kledingkast-back-up');
       return;
     }
-    var ok = await confirmDialog({
-      title: 'Back-up terugzetten?',
-      body: 'Er komen ' + data.items.length + ' kledingstukken en ' + (data.outfits || []).length +
-            ' outfits bij. Bestaande stukken met hetzelfde id worden overschreven.',
-      confirmLabel: 'Terugzetten'
+    var folders = data.folders || [];
+    var mode = await choiceDialog({
+      title: 'Wat wil je overnemen?',
+      body: 'Het bestand bevat ' + data.items.length + ' kledingstukken, ' + (data.outfits || []).length +
+            ' outfits en ' + folders.length + ' mappen.',
+      choices: [
+        {
+          key: 'merge', label: 'Alleen Askims keuzes', primary: true,
+          hint: 'Neemt haar cijfers, doneerkeuzes en outfits over in jouw kast. Jouw foto\'s en gegevens blijven zoals ze zijn.'
+        },
+        {
+          key: 'replace', label: 'Alles terugzetten',
+          hint: 'Voor een verhuizing naar een nieuwe telefoon. Overschrijft records met hetzelfde id.'
+        }
+      ]
     });
-    if (!ok) return;
+    if (!mode) return;
+
+    if (mode === 'merge') {
+      toast('Keuzes van Askim overnemen…');
+      var res = await mergeAskim(data);
+      render();
+      toast(res.ratings + ' cijfers en ' + plural(res.outfits, 'outfit', 'outfits') + ' overgenomen');
+      return;
+    }
 
     toast('Bezig met terugzetten…');
     var images = (data.images || []).map(function (rec) {
@@ -1064,12 +1602,51 @@
       };
     });
     await KastDB.putMany(KastDB.IMAGES, images);
-    await KastDB.putMany(KastDB.ITEMS, data.items);
+    await KastDB.putMany(KastDB.ITEMS, data.items.map(normalizeItem));
     await KastDB.putMany(KastDB.OUTFITS, data.outfits || []);
+    await KastDB.putMany(KastDB.FOLDERS, folders);
     images.forEach(function (rec) { forgetImage(rec.id); });
     await loadAll();
     render();
     toast('Back-up teruggezet');
+  }
+
+  /* Neemt uit een back-up alleen over wat Askim heeft toegevoegd: cijfers,
+     doneerkeuzes en haar eigen outfits. De rest van jouw kast blijft intact. */
+  async function mergeAskim(data) {
+    var ratings = 0, outfitsAdded = 0;
+
+    for (var i = 0; i < data.items.length; i++) {
+      var src = normalizeItem(data.items[i]);
+      var mine = getItem(src.id);
+      if (!mine) continue;
+      var changed = false;
+      if (src.rating != null && src.rating !== mine.rating) { mine.rating = src.rating; changed = true; }
+      if (src.donate && !mine.donate) { mine.donate = true; changed = true; }
+      if (changed) { await saveItem(mine); ratings++; }
+    }
+
+    var outs = data.outfits || [];
+    for (var j = 0; j < outs.length; j++) {
+      var o = outs[j];
+      if (o.author !== 'askim' || getOutfit(o.id)) continue;
+      // Alleen kleding die ik ook echt heb; de rest zou dode verwijzingen geven.
+      o.itemIds = (o.itemIds || []).filter(function (id) { return !!getItem(id); });
+      o.seasons = o.seasons || [];
+      o.wearCount = o.wearCount || 0;
+      await saveOutfit(o);
+      outfitsAdded++;
+    }
+
+    var flds = data.folders || [];
+    for (var k = 0; k < flds.length; k++) {
+      if (getFolder(flds[k].id)) continue;
+      flds[k].outfitIds = (flds[k].outfitIds || []).filter(function (id) { return !!getOutfit(id); });
+      flds[k].icon = flds[k].icon || '📁';
+      await saveFolder(flds[k]);
+    }
+
+    return { ratings: ratings, outfits: outfitsAdded };
   }
 
   /* ─────────────────────────────── Dialoogje ─────────────────────────────── */
@@ -1098,11 +1675,43 @@
     });
   }
 
+  /* Zelfde idee, maar met meerdere uitkomsten. Levert de gekozen sleutel op,
+     of null als er geannuleerd wordt. */
+  function choiceDialog(opts) {
+    return new Promise(function (resolve) {
+      els.overlay.innerHTML = '<div class="dialog">' +
+        '<h3 class="dialog-title">' + esc(opts.title) + '</h3>' +
+        '<p class="dialog-body">' + esc(opts.body || '') + '</p>' +
+        '<div class="choice-list">' + opts.choices.map(function (c) {
+          return '<button class="choice' + (c.primary ? ' primary' : '') + '" data-dlg="' + esc(c.key) + '">' +
+            '<b>' + esc(c.label) + '</b>' +
+            (c.hint ? '<span>' + esc(c.hint) + '</span>' : '') + '</button>';
+        }).join('') + '</div>' +
+        '<div class="dialog-actions">' +
+          '<button class="btn btn-secondary btn-block" data-dlg="">Annuleren</button>' +
+        '</div></div>';
+      els.overlay.hidden = false;
+      document.body.classList.add('locked');
+
+      els.overlay.onclick = function (ev) {
+        var btn = ev.target.closest('[data-dlg]');
+        if (!btn && ev.target !== els.overlay) return;
+        var key = btn ? btn.getAttribute('data-dlg') : '';
+        els.overlay.onclick = null;
+        closeOverlay();
+        resolve(key || null);
+      };
+    });
+  }
+
   /* ────────────────────────────── Gebeurtenissen ─────────────────────────── */
 
   var actions = {
     'new-item': function () { clearDraft(); go('#/item/new'); },
     'new-outfit': function () { clearDraft(); go('#/outfit/new'); },
+    'new-outfit-askim': function () { clearDraft(); go('#/outfit/new-askim'); },
+    'new-folder': function () { clearDraft(); go('#/map/new'); },
+    'new-folder-from-sheet': function () { closeOverlay(); clearDraft(); go('#/map/new'); },
     'bulk-add': function () { els.fileBulk.click(); },
     'pick-photo': function () { els.filePhoto.click(); },
 
@@ -1113,9 +1722,42 @@
     'filter-sort': function (btn) { state.filters.sort = btn.getAttribute('data-val'); render(); },
     'filter-fav': function () { state.filters.fav = !state.filters.fav; render(); },
     'filter-unworn': function () { state.filters.unworn = !state.filters.unworn; render(); },
+    'filter-donate': function () { state.filters.donate = !state.filters.donate; render(); },
     'filter-reset': function () {
-      state.filters = { q: state.filters.q, cat: '', season: '', color: '', fav: false, unworn: false, sort: 'recent' };
+      state.filters = { q: state.filters.q, cat: '', season: '', color: '', fav: false, unworn: false, donate: false, sort: 'recent' };
       render();
+    },
+
+    /* Cijfers van Askim en de doneerstapel */
+    'rate-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      var val = btn.getAttribute('data-val');
+      it.rating = val === '' ? null : Number(val);
+      await saveItem(it);
+      render();
+      if (it.rating) toast('Cijfer ' + it.rating + ' opgeslagen');
+    },
+    'skip-askim': function (btn) {
+      state.askimSkipped.push(btn.getAttribute('data-id'));
+      render();
+    },
+    'askim-unskip': function () { state.askimSkipped = []; render(); },
+    'donate-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.donate = true;
+      await saveItem(it);
+      render();
+      toast('Op de doneerstapel gelegd');
+    },
+    'undonate-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.donate = false;
+      await saveItem(it);
+      render();
+      toast('Terug in de kast');
     },
 
     'draft-cat': function (btn) {
@@ -1129,33 +1771,68 @@
       selectSingle(btn);
     },
     'draft-oseason': function (btn) { toggleMulti(btn, state.draft.data.seasons); },
+    'draft-folder-icon': function (btn) {
+      state.draft.data.icon = btn.getAttribute('data-val');
+      selectSingle(btn);
+    },
 
-    'remove-photo': function () {
+    /* Foto's van een kledingstuk */
+    'set-cover': function (btn) {
       var d = state.draft;
-      if (d.previewUrl) { URL.revokeObjectURL(d.previewUrl); d.previewUrl = ''; }
-      d.newImage = null;
-      d.removeImage = true;
+      if (!d || d.kind !== 'item') return;
+      d.cover = btn.getAttribute('data-id');
       syncItemDraftFromDom();
       render();
+      toast('Hoofdfoto ingesteld');
+    },
+    'drop-photo': function (btn) {
+      var d = state.draft;
+      if (!d || d.kind !== 'item') return;
+      var pid = btn.getAttribute('data-id');
+      d.photos = d.photos.filter(function (p) {
+        if (p.id !== pid) return true;
+        if (p.url) URL.revokeObjectURL(p.url);
+        // Stond deze al in de database? Dan pas bij opslaan echt weggooien.
+        if (!p.blobs) d.removed.push(p.id);
+        return false;
+      });
+      if (d.cover === pid) d.cover = d.photos.length ? d.photos[0].id : null;
+      syncItemDraftFromDom();
+      render();
+    },
+    'show-photo': function (btn) {
+      var imgId = btn.getAttribute('data-id');
+      var main = document.getElementById('detailPhoto');
+      if (!main) return;
+      Array.prototype.forEach.call(document.querySelectorAll('.gallery-thumb'), function (t) {
+        t.classList.toggle('is-active', t === btn);
+      });
+      imageUrl(imgId, 'full').then(function (url) {
+        if (!url) return;
+        main.src = url;
+        main.classList.add('loaded');
+        if (main.parentNode) main.parentNode.classList.add('has-photo');
+      });
     },
 
     'save-item': function () { commitItem(); },
     'save-outfit': function () { commitOutfit(); },
+    'save-folder': function () { commitFolder(); },
     'cancel-form': function () {
       var kind = state.draft ? state.draft.kind : 'item';
       var id = state.draft && state.draft.id !== 'new' ? state.draft.id : null;
+      var fromAskim = state.draft && state.draft.kind === 'outfit' && !id && state.draft.data.author === 'askim';
       clearDraft();
-      if (kind === 'outfit') go(id ? '#/outfit/' + id : '#/outfits');
+      if (fromAskim) go('#/askim');
+      else if (kind === 'outfit') go(id ? '#/outfit/' + id : '#/outfits');
+      else if (kind === 'folder') go(id ? '#/map/' + id : '#/mappen');
       else go(id ? '#/item/' + id : '#/kast');
     },
 
     'open-picker': function () { openPicker(); },
+    'assign-folders': function (btn) { openFolderAssign(btn.getAttribute('data-id')); },
     'picker-close': function () { closeOverlay(); render(); },
-    'picker-done': function () {
-      state.draft.data.itemIds = state.pickerSel.slice();
-      closeOverlay();
-      render();
-    },
+    'picker-done': function () { applyPicker(); },
     'picker-toggle': function (btn) {
       var id = btn.getAttribute('data-id');
       var i = state.pickerSel.indexOf(id);
@@ -1168,6 +1845,12 @@
       syncOutfitDraftFromDom();
       var id = btn.getAttribute('data-id');
       state.draft.data.itemIds = state.draft.data.itemIds.filter(function (x) { return x !== id; });
+      render();
+    },
+    'unpick-outfit': function (btn) {
+      syncFolderDraftFromDom();
+      var id = btn.getAttribute('data-id');
+      state.draft.data.outfitIds = state.draft.data.outfitIds.filter(function (x) { return x !== id; });
       render();
     },
     'suggest-outfit': function () { suggestOutfit(); },
@@ -1227,13 +1910,26 @@
       toast('Outfit verwijderd');
       go('#/outfits');
     },
+    'delete-folder': async function (btn) {
+      var f = getFolder(btn.getAttribute('data-id'));
+      if (!f) return;
+      var ok = await confirmDialog({
+        title: 'Map verwijderen?',
+        body: 'Alleen de map verdwijnt; de outfits erin blijven gewoon bestaan.',
+        confirmLabel: 'Verwijderen', danger: true
+      });
+      if (!ok) return;
+      await deleteFolder(f.id);
+      toast('Map verwijderd');
+      go('#/mappen');
+    },
 
     'export': function () { exportBackup(); },
     'import': function () { els.fileImport.click(); },
     'wipe': async function () {
       var ok = await confirmDialog({
         title: 'Alles verwijderen?',
-        body: 'Al je kledingstukken, outfits en foto\'s worden gewist. Dit kan niet ongedaan worden gemaakt.',
+        body: 'Al je kledingstukken, outfits, mappen en foto\'s worden gewist. Dit kan niet ongedaan worden gemaakt.',
         confirmLabel: 'Alles wissen', danger: true
       });
       if (!ok) return;
@@ -1284,22 +1980,24 @@
   }
 
   async function onPhotoChosen(ev) {
-    var file = ev.target.files && ev.target.files[0];
+    var files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = '';
-    if (!file || !state.draft || state.draft.kind !== 'item') return;
+    if (!files.length || !state.draft || state.draft.kind !== 'item') return;
     syncItemDraftFromDom();
-    toast('Foto verwerken…');
-    try {
-      var processed = await processImage(file);
-      var d = state.draft;
-      if (d.previewUrl) URL.revokeObjectURL(d.previewUrl);
-      d.newImage = processed;
-      d.removeImage = false;
-      d.previewUrl = URL.createObjectURL(processed.thumb);
-      render();
-    } catch (err) {
-      toast('Kan deze foto niet gebruiken');
+    toast(files.length > 1 ? files.length + ' foto\'s verwerken…' : 'Foto verwerken…');
+    var d = state.draft;
+    var added = 0;
+    for (var i = 0; i < files.length; i++) {
+      try {
+        var processed = await processImage(files[i]);
+        var imgId = uid('img');
+        d.photos.push({ id: imgId, url: URL.createObjectURL(processed.thumb), blobs: processed });
+        if (!d.cover) d.cover = imgId;
+        added++;
+      } catch (err) { /* sla onleesbare bestanden over */ }
     }
+    render();
+    if (!added) toast('Kan deze foto niet gebruiken');
   }
 
   async function onBulkChosen(ev) {
@@ -1314,7 +2012,8 @@
         var imgId = uid('img');
         await KastDB.put(KastDB.IMAGES, { id: imgId, full: processed.full, thumb: processed.thumb });
         var item = newItem();
-        item.imageId = imgId;
+        item.imageIds = [imgId];
+        item.coverImageId = imgId;
         item.category = 'overig';
         await saveItem(item);
         made++;
@@ -1335,20 +2034,22 @@
   async function loadAll() {
     var res = await Promise.all([
       KastDB.getAll(KastDB.ITEMS),
-      KastDB.getAll(KastDB.OUTFITS)
+      KastDB.getAll(KastDB.OUTFITS),
+      KastDB.getAll(KastDB.FOLDERS)
     ]);
     // Oudere of geïmporteerde records missen soms een veld; hier één keer rechtzetten.
-    state.items = (res[0] || []).map(function (i) {
-      i.colors = i.colors || [];
-      i.seasons = i.seasons || [];
-      i.wearCount = i.wearCount || 0;
-      return i;
-    });
+    state.items = (res[0] || []).map(normalizeItem);
     state.outfits = (res[1] || []).map(function (o) {
       o.itemIds = o.itemIds || [];
       o.seasons = o.seasons || [];
       o.wearCount = o.wearCount || 0;
+      o.author = o.author || 'ik';
       return o;
+    });
+    state.folders = (res[2] || []).map(function (f) {
+      f.outfitIds = f.outfitIds || [];
+      f.icon = f.icon || '📁';
+      return f;
     });
   }
 
@@ -1372,8 +2073,8 @@
       // Een half ingevuld formulier verlaten betekent: concept weggooien.
       if (state.draft) {
         var parts = parseRoute();
-        var stillEditing = (parts[0] === 'item' || parts[0] === 'outfit') &&
-          (parts[1] === 'new' || parts[2] === 'edit');
+        var stillEditing = (parts[0] === 'item' || parts[0] === 'outfit' || parts[0] === 'map') &&
+          (String(parts[1]).indexOf('new') === 0 || parts[2] === 'edit');
         if (!stillEditing) clearDraft();
       }
       render();

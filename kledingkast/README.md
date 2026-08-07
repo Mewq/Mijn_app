@@ -26,28 +26,68 @@ internet.
 ## Wat kun je ermee
 
 **Kast**
-- Kledingstukken toevoegen met een foto (camera of fotorol), naam, categorie,
-  een of meer kleuren, seizoenen, merk, maat en notities.
+- Kledingstukken toevoegen met een of meer foto's (camera of fotorol), naam,
+  categorie, een of meer kleuren, seizoenen, merk, maat en notities.
+- Heeft een stuk meerdere foto's, dan kies je met een tik welke de **hoofdfoto**
+  is (die met ★). Dat is de foto die je in de kast en op outfits terugziet; de
+  rest blader je door op het detailscherm.
 - Meerdere foto's tegelijk inladen met de knop ⧉ rechtsboven; elke foto wordt
-  een kledingstuk dat je later een naam geeft. Die krijgen het label
+  dan een apart kledingstuk dat je later een naam geeft. Die krijgen het label
   "nog invullen" zolang de naam leeg is.
 - Zoeken op naam, merk, kleur of categorie, en filteren op categorie, seizoen,
-  kleur, favorieten of "nooit gedragen". Sorteren op nieuwste, naam of hoe vaak
-  je iets draagt.
+  kleur, favorieten of "nooit gedragen". Sorteren op nieuwste, naam, het cijfer
+  van Askim of hoe vaak je iets draagt.
 
-**Outfits**
+**Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
   gelegenheid, seizoen en notities.
 - "🎲 Verras me" stelt zelf een combinatie voor: een bovenstuk, een onderstuk en
   waar mogelijk schoenen, een jas en een accessoire.
-- Verwijder je een kledingstuk uit je kast, dan verdwijnt het ook uit de outfits
-  waar het in zat.
+- In een **map** verzamel je outfits die bij elkaar horen — bijvoorbeeld
+  "Nog kopen" of "Vakantie Italië". Een outfit mag in meerdere mappen zitten.
+  Verwijder je een map, dan blijven de outfits zelf gewoon bestaan.
+- Verwijder je een kledingstuk, dan verdwijnt het ook uit de outfits waar het in
+  zat; verwijder je een outfit, dan verdwijnt die ook uit de mappen.
 
 **Bijhouden**
 - "Vandaag gedragen" op een kledingstuk of outfit houdt bij hoe vaak en wanneer
   je iets draagt. Bij een outfit telt dat door naar alle stukken erin.
 - Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie, wat je het
   meest draagt en wat nog nooit aan is geweest.
+
+**Doneren**
+- Kleding die je niet meer wilt dragen leg je op de doneerstapel, vanaf het
+  kledingstuk zelf of vanuit de sectie Mijn Askim.
+- Die stukken tellen niet meer mee in je kast, statistieken of outfitvoorstellen,
+  maar blijven bewaard tot je ze echt weggeeft. Onder **Meer → Doneerstapel**
+  zet je ze terug in de kast of verwijder je ze definitief.
+
+## Mijn Askim
+
+Het tabblad **💛 Askim** is haar plek in de app. Daar kan zij:
+
+- **Cijfers geven** van 1 tot 10, één kledingstuk tegelijk. Wat ze niet weet slaat
+  ze over; wat weg mag legt ze meteen op de doneerstapel. Jij sorteert daarna je
+  kast op "💛 Cijfer van Askim" om te zien wat zij het leukst vindt.
+- **Zelf outfits samenstellen.** Die krijgen het label 💛 Askim, zodat je ziet van
+  wie ze zijn.
+- Haar hoogste cijfers en de doneerstapel in één oogopslag bekijken.
+
+### Samen werken via een back-up
+
+Jullie telefoons delen niets automatisch; het gaat via één bestand.
+
+1. Jij: **Meer → Back-up downloaden**, en stuur het bestand naar haar.
+2. Zij: **Meer → Back-up terugzetten → "Alles terugzetten"**. Nu staat jouw kast
+   op haar telefoon.
+3. Zij geeft cijfers en maakt outfits, en stuurt daarna haar eigen back-up terug.
+4. Jij: **Back-up terugzetten → "Alleen Askims keuzes"**. Dan komen alleen haar
+   cijfers, doneerkeuzes en outfits binnen. Kleding die jij ondertussen hebt
+   toegevoegd, je foto's en je eigen gegevens blijven ongemoeid.
+
+Stap 4 is het verschil tussen de twee keuzes in het dialoogvenster:
+"Alles terugzetten" overschrijft records met hetzelfde id (bedoeld voor een
+verhuizing naar een nieuwe telefoon), "Alleen Askims keuzes" voegt samen.
 
 ## Back-ups
 
@@ -56,9 +96,7 @@ browsergegevens, of stap je over op een ander apparaat of een andere browser,
 dan is de kast weg.
 
 Onder **Meer → Back-up** download je één JSON-bestand met alles erin, foto's
-inbegrepen. Datzelfde bestand zet je op een ander apparaat weer terug met
-"Back-up terugzetten"; stukken met hetzelfde id worden overschreven, de rest
-komt erbij. Maak die back-up af en toe.
+inbegrepen. Maak die back-up af en toe.
 
 ## Onder de motorkap
 
@@ -68,7 +106,7 @@ Losse bestanden, geen build-stap en geen externe libraries.
 | --- | --- |
 | `index.html` | Het omhulsel: kopbalk, scherm, tabbalk |
 | `app.js` | Alle schermen, formulieren en logica |
-| `db.js` | IndexedDB-laag (`items`, `outfits`, `images`) |
+| `db.js` | IndexedDB-laag (`items`, `outfits`, `folders`, `images`) |
 | `style.css` | Vormgeving, met een lichte en donkere modus |
 | `sw.js` | Service worker, zodat de app offline blijft werken |
 | `icon.svg`, `icon-*.png` | Icoon voor het beginscherm |
@@ -76,6 +114,10 @@ Losse bestanden, geen build-stap en geen externe libraries.
 Foto's worden bij het toevoegen verkleind naar maximaal 1400 px (plus een
 miniatuur van 480 px voor het overzicht) en als JPEG-blob opgeslagen. Een foto
 van de telefoon van enkele megabytes wordt zo een paar honderd kilobyte.
+
+Een kledingstuk bewaart zijn foto's als `imageIds` met daarnaast een
+`coverImageId` voor de hoofdfoto. Back-ups uit een eerdere versie hadden één
+`imageId`; die worden bij het inladen automatisch omgezet.
 
 Pas je `app.js`, `style.css`, `db.js` of `index.html` aan, verhoog dan het
 versienummer `CACHE` bovenin `sw.js`. Anders blijven bezoekers de oude versie

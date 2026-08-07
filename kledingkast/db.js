@@ -6,10 +6,11 @@
   'use strict';
 
   var DB_NAME = 'kledingkast';
-  var DB_VERSION = 1;
+  var DB_VERSION = 2;
   var STORE_ITEMS = 'items';
   var STORE_OUTFITS = 'outfits';
   var STORE_IMAGES = 'images';
+  var STORE_FOLDERS = 'folders';
 
   var dbPromise = null;
 
@@ -27,6 +28,10 @@
         }
         if (!db.objectStoreNames.contains(STORE_IMAGES)) {
           db.createObjectStore(STORE_IMAGES, { keyPath: 'id' });
+        }
+        // v2: mappen om outfits in te verzamelen
+        if (!db.objectStoreNames.contains(STORE_FOLDERS)) {
+          db.createObjectStore(STORE_FOLDERS, { keyPath: 'id' });
         }
         void ev;
       };
@@ -96,10 +101,11 @@
   }
 
   function clearAll() {
-    return tx([STORE_ITEMS, STORE_OUTFITS, STORE_IMAGES], 'readwrite').then(function (t) {
+    return tx([STORE_ITEMS, STORE_OUTFITS, STORE_IMAGES, STORE_FOLDERS], 'readwrite').then(function (t) {
       t.objectStore(STORE_ITEMS).clear();
       t.objectStore(STORE_OUTFITS).clear();
       t.objectStore(STORE_IMAGES).clear();
+      t.objectStore(STORE_FOLDERS).clear();
       return done(t, true);
     });
   }
@@ -108,6 +114,7 @@
     ITEMS: STORE_ITEMS,
     OUTFITS: STORE_OUTFITS,
     IMAGES: STORE_IMAGES,
+    FOLDERS: STORE_FOLDERS,
     open: open,
     getAll: getAll,
     get: get,
