@@ -66,12 +66,18 @@ internet.
 
 Het tabblad **💛 Askim** is haar plek in de app. Daar kan zij:
 
-- **Cijfers geven** van 1 tot 10, één kledingstuk tegelijk. Wat ze niet weet slaat
-  ze over; wat weg mag legt ze meteen op de doneerstapel. Jij sorteert daarna je
-  kast op "💛 Cijfer van Askim" om te zien wat zij het leukst vindt.
+- **Cijfers geven** van 1 tot 10, één ding tegelijk. Met de schakelaar
+  **Kleding / Outfits** kiest ze wat ze beoordeelt; de tellers laten zien hoeveel
+  er nog wacht. Wat ze niet weet slaat ze over; kleding die weg mag legt ze
+  meteen op de doneerstapel. Is de ene rij leeg en de andere niet, dan pakt de
+  app die vanzelf op.
 - **Zelf outfits samenstellen.** Die krijgen het label 💛 Askim, zodat je ziet van
-  wie ze zijn.
+  wie ze zijn. Ze beoordeelt zowel jouw outfits als die van haarzelf.
 - Haar hoogste cijfers en de doneerstapel in één oogopslag bekijken.
+
+Jij sorteert daarna je kast én je outfitlijst op "💛 Cijfer van Askim" om te zien
+wat zij het leukst vindt. Cijfers staan als badge op de tegels en zijn vanaf elk
+detailscherm aan te passen of te wissen.
 
 ### Samen werken via een back-up
 
@@ -82,8 +88,9 @@ Jullie telefoons delen niets automatisch; het gaat via één bestand.
    op haar telefoon.
 3. Zij geeft cijfers en maakt outfits, en stuurt daarna haar eigen back-up terug.
 4. Jij: **Back-up terugzetten → "Alleen Askims keuzes"**. Dan komen alleen haar
-   cijfers, doneerkeuzes en outfits binnen. Kleding die jij ondertussen hebt
-   toegevoegd, je foto's en je eigen gegevens blijven ongemoeid.
+   cijfers (voor kleding én outfits), doneerkeuzes en nieuwe outfits binnen.
+   Kleding die jij ondertussen hebt toegevoegd, je foto's en je eigen gegevens
+   blijven ongemoeid.
 
 Stap 4 is het verschil tussen de twee keuzes in het dialoogvenster:
 "Alles terugzetten" overschrijft records met hetzelfde id (bedoeld voor een

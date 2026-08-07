@@ -765,11 +765,19 @@ input, textarea, select { font: inherit; }
   flex: 1;
   text-align: center;
   padding: 8px 0;
+  border: 0;
+  background: transparent;
   border-radius: 100px;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   color: var(--ink-soft);
+  cursor: pointer;
 }
+
+/* Binnen een sectie (bijv. kleding/outfits beoordelen) staat de kiezer al
+   in een kolom met marge, dus zonder eigen buitenmarge. */
+.segment.small { margin: 0 0 10px; font-size: 13px; }
 
 .segment-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 
@@ -978,7 +986,16 @@ input, textarea, select { font: inherit; }
 
 /* De foto mag de cijferknoppen niet van het scherm duwen: beoordelen moet
    in één blik kunnen, zonder scrollen. */
-.askim-card .photo-frame { aspect-ratio: 3 / 4; max-height: 30dvh; margin: 0 auto 8px; }
+.askim-card .photo-frame,
+.askim-card .collage {
+  aspect-ratio: 3 / 4;
+  max-height: 30dvh;
+  margin: 0 auto 8px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.sort-chips { padding: 12px 14px 0; margin-top: 0; }
 .askim-name { font-size: 18px; text-align: center; }
 .askim-card .rate-label { margin: 8px 0 2px; }
 .askim-card .row-actions { margin-top: 10px; }
