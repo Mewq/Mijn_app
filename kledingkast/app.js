@@ -626,6 +626,8 @@
     return 'kast';
   }
 
+  var lastRoute = null;
+
   function render() {
     if (!state.ready) return;
     var parts = parseRoute();
@@ -680,6 +682,17 @@
     els.view.innerHTML = view;
     els.view.setAttribute('data-route', parts[0]);
     els.tabbar.innerHTML = tabBar(rootTab(parts));
+
+    // Alleen bij een echte schermwissel laten opkomen — niet bij elk tikje
+    // op een filterchip, want dan knippert het hele scherm mee.
+    var here = parts.join('/');
+    if (here !== lastRoute) {
+      lastRoute = here;
+      els.view.classList.remove('is-entering');
+      void els.view.offsetWidth;
+      els.view.classList.add('is-entering');
+    }
+
     hydrateImages(els.view);
   }
 
@@ -689,6 +702,16 @@
       '<div class="topbar-actions">' + (actions || '') + '</div>';
   }
 
+  /* Hetzelfde hangertje als het app-icoon; op een telefoon verborgen, want
+     daar is de tabbalk onderaan geen plek voor een woordmerk. */
+  var BRAND = '<div class="brand">' +
+    '<svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true">' +
+      '<g fill="none" stroke="currentColor" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M256 243 L256 207 A 32 32 0 1 1 288 179"/>' +
+        '<path d="M256 243 L106 357 L406 357 Z"/>' +
+      '</g></svg>' +
+    '<span class="brand-name">Kledingkast</span></div>';
+
   function tabBar(active) {
     var tabs = [
       { key: 'kast', href: '#/kast', icon: '🚪', label: 'Kast' },
@@ -696,8 +719,9 @@
       { key: 'askim', href: '#/askim', icon: '💛', label: 'Askim' },
       { key: 'meer', href: '#/meer', icon: '☰', label: 'Meer' }
     ];
-    return tabs.map(function (t) {
-      return '<a class="tab' + (t.key === active ? ' active' : '') + '" href="' + t.href + '">' +
+    return BRAND + tabs.map(function (t) {
+      return '<a class="tab' + (t.key === active ? ' active' : '') + '" href="' + t.href + '"' +
+        (t.key === active ? ' aria-current="page"' : '') + '>' +
         '<span class="tab-icon">' + t.icon + '</span><span class="tab-label">' + t.label + '</span></a>';
     }).join('');
   }
