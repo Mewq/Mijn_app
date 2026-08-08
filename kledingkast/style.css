@@ -1257,6 +1257,43 @@ input, textarea, select { font: inherit; }
   .grid { grid-template-columns: repeat(5, 1fr); }
 }
 
+/* ──────────────────── Labels, wasmand en kleurherkenning ───────────────── */
+
+.tag-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.tag-row .input { flex: 1; }
+.tag-row .btn { flex: none; }
+.tag-chips { margin-top: 0; margin-bottom: 8px; }
+.tag-chips .chip { padding-right: 6px; }
+
+.tag-x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px 0 6px;
+  cursor: pointer;
+}
+
+.detect-btn { margin-top: 0; margin-bottom: 8px; }
+
+.vak-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 14px 0;
+  padding: 10px 8px 10px 13px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13.5px;
+}
+
+.vak-banner .btn { flex: none; min-height: 34px; padding: 0 10px; font-size: 13.5px; margin-left: auto; }
+.vak-banner.subtle { background: var(--surface-2); color: var(--ink-soft); }
+.vak-banner.subtle .btn { color: var(--accent); }
+.tile-badge.wash { background: rgba(20, 17, 15, .62); }
+
 /* ────────────────────────────── Agenda ─────────────────────────────────── */
 
 .week-nav {

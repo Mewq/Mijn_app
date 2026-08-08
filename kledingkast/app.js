@@ -87,7 +87,8 @@
     outfits: [],
     folders: [],
     ready: false,
-    filters: { q: '', cat: '', season: '', color: '', fav: false, unworn: false, donate: false, sort: 'recent' },
+    filters: { q: '', cat: '', season: '', color: '', tag: '', fav: false, unworn: false,
+               vak: 'kast', sort: 'recent' },
     filtersOpen: false,
     draft: null,          // formuliergegevens tijdens bewerken
     pickerSel: null,      // selectie in de kiezer
@@ -257,8 +258,104 @@
     var bmp = await loadBitmap(file);
     var full = await drawToBlob(bmp, 1400, 0.85);
     var thumb = await drawToBlob(bmp, 480, 0.75);
+    var colors = [];
+    try { colors = detectColors(bmp); } catch (err) { colors = []; }
     if (bmp.close) bmp.close();
-    return { full: full, thumb: thumb };
+    return { full: full, thumb: thumb, colors: colors };
+  }
+
+  /* ─────────────────── Kleur herkennen uit de foto ────────────────────────
+     In RGB liggen donkergrijs en zwart dicht bij elkaar terwijl ze er anders
+     uitzien; in Lab komt de afstand overeen met wat je ziet. Vandaar de
+     omweg sRGB → XYZ → Lab voordat we bij het palet zoeken. */
+
+  function pivotRgb(c) {
+    return c > 0.04045 ? Math.pow((c + 0.055) / 1.055, 2.4) : c / 12.92;
+  }
+
+  function pivotXyz(c) {
+    return c > 0.008856 ? Math.cbrt(c) : (7.787 * c) + 16 / 116;
+  }
+
+  function srgbToLab(r, g, b) {
+    var rl = pivotRgb(r / 255), gl = pivotRgb(g / 255), bl = pivotRgb(b / 255);
+    var x = pivotXyz((rl * 0.4124 + gl * 0.3576 + bl * 0.1805) / 0.95047);
+    var y = pivotXyz(rl * 0.2126 + gl * 0.7152 + bl * 0.0722);
+    var z = pivotXyz((rl * 0.0193 + gl * 0.1192 + bl * 0.9505) / 1.08883);
+    return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+  }
+
+  var paletteLabCache = null;
+
+  function paletteLab() {
+    if (paletteLabCache) return paletteLabCache;
+    paletteLabCache = COLORS.filter(function (c) { return c.hex.charAt(0) === '#'; })
+      .map(function (c) {
+        var n = parseInt(c.hex.slice(1), 16);
+        return { key: c.key, lab: srgbToLab((n >> 16) & 255, (n >> 8) & 255, n & 255) };
+      });
+    return paletteLabCache;
+  }
+
+  function labDist2(a, b) {
+    var dl = a[0] - b[0], da = a[1] - b[1], db = a[2] - b[2];
+    return dl * dl + da * da + db * db;
+  }
+
+  /* Levert één of twee kleuren uit het palet, of 'print' als er niets
+     duidelijk overheerst. */
+  function detectColors(bmp) {
+    var W = 56, H = 72;
+    var canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, W, H);
+    var data = ctx.getImageData(0, 0, W, H).data;
+
+    var pal = paletteLab();
+    var score = {};
+    var totaal = 0;
+
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        // Het kledingstuk ligt meestal in het midden; de randen zijn vaker
+        // vloer, muur of hanger. Vandaar dat het midden zwaarder telt.
+        var dx = (x + 0.5) / W - 0.5;
+        var dy = (y + 0.5) / H - 0.5;
+        var gewicht = (Math.abs(dx) < 0.3 && Math.abs(dy) < 0.35) ? 3 : 1;
+
+        var i = (y * W + x) * 4;
+        var lab = srgbToLab(data[i], data[i + 1], data[i + 2]);
+        var best = null, bestD = Infinity;
+        for (var p = 0; p < pal.length; p++) {
+          var d = labDist2(lab, pal[p].lab);
+          if (d < bestD) { bestD = d; best = pal[p].key; }
+        }
+        score[best] = (score[best] || 0) + gewicht;
+        totaal += gewicht;
+      }
+    }
+
+    var gesorteerd = Object.keys(score).sort(function (a, b) { return score[b] - score[a]; });
+    if (!gesorteerd.length) return [];
+    var aandeel = score[gesorteerd[0]] / totaal;
+    if (aandeel < 0.34) return ['print'];
+
+    var uit = [gesorteerd[0]];
+    if (gesorteerd[1] && score[gesorteerd[1]] / totaal > 0.22) uit.push(gesorteerd[1]);
+    return uit;
+  }
+
+  function colorLabel(key) {
+    return (colorMap[key] || {}).label || key;
+  }
+
+  function getImageBlob(id, kind) {
+    return KastDB.get(KastDB.IMAGES, id).then(function (rec) {
+      if (!rec) return null;
+      return kind === 'full' ? (rec.full || rec.thumb) : (rec.thumb || rec.full);
+    });
   }
 
   function imageUrl(id, kind) {
@@ -370,6 +467,8 @@
       rating: null,        // cijfer van Askim, 1 t/m 10
       donate: false,       // ligt op de doneerstapel
       price: null,         // aanschafprijs in euro's
+      tags: [],            // vrije labels
+      laundry: false,      // ligt in de wasmand
       wearDates: [],       // op welke dagen gedragen
       createdAt: Date.now(), updatedAt: Date.now()
     };
@@ -414,6 +513,8 @@
     if (i.rating === undefined) i.rating = null;
     if (i.donate === undefined) i.donate = false;
     if (i.price === undefined) i.price = null;
+    if (!i.tags) i.tags = [];
+    if (i.laundry === undefined) i.laundry = false;
     // Oudere records kennen alleen een teller en de laatste datum. Die laatste
     // dag nemen we mee, zodat de agenda niet bij nul begint; de teller blijft
     // leidend voor het aantal.
@@ -631,15 +732,18 @@
     var f = state.filters;
     var q = f.q.trim().toLowerCase();
     var list = state.items.filter(function (it) {
-      // Wat weggegeven wordt hoort niet meer in het dagelijkse overzicht.
-      if (!!it.donate !== !!f.donate) return false;
+      // Wat in de was ligt of weggegeven wordt, hoort niet in het dagelijkse
+      // overzicht — maar is met één tik wel op te vragen.
+      if (bucketOf(it) !== f.vak) return false;
       if (f.cat && it.category !== f.cat) return false;
+      if (f.tag && (it.tags || []).indexOf(f.tag) === -1) return false;
       if (f.color && (it.colors || []).indexOf(f.color) === -1) return false;
       if (!itemMatchesSeason(it, f.season)) return false;
       if (f.fav && !it.favorite) return false;
       if (f.unworn && (it.wearCount || 0) > 0) return false;
       if (q) {
         var hay = [it.name, it.brand, it.notes, (catMap[it.category] || {}).label]
+          .concat(it.tags || [])
           .concat((it.colors || []).map(function (c) { return (colorMap[c] || {}).label; }))
           .join(' ').toLowerCase();
         if (hay.indexOf(q) === -1) return false;
@@ -661,12 +765,30 @@
 
   function activeFilterCount() {
     var f = state.filters;
-    return (f.season ? 1 : 0) + (f.color ? 1 : 0) + (f.fav ? 1 : 0) + (f.unworn ? 1 : 0) +
-      (f.donate ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+    return (f.season ? 1 : 0) + (f.color ? 1 : 0) + (f.tag ? 1 : 0) + (f.fav ? 1 : 0) +
+      (f.unworn ? 1 : 0) + (f.vak !== 'kast' ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+  }
+
+  /* In welk vak hoort dit stuk? Doneren wint van de wasmand. */
+  function bucketOf(it) {
+    return it.donate ? 'donate' : it.laundry ? 'laundry' : 'kast';
   }
 
   function donateItems() {
     return state.items.filter(function (i) { return i.donate; });
+  }
+
+  function laundryItems() {
+    return state.items.filter(function (i) { return i.laundry && !i.donate; });
+  }
+
+  /* Alle labels die ergens in de kast gebruikt worden. */
+  function allTags() {
+    var seen = {};
+    state.items.forEach(function (i) {
+      (i.tags || []).forEach(function (t) { seen[t.toLowerCase()] = t; });
+    });
+    return Object.keys(seen).sort().map(function (k) { return seen[k]; });
   }
 
   /* Stukken die Askim nog niet beoordeeld heeft (en deze sessie niet overslaat). */
@@ -977,7 +1099,26 @@
         '<div class="chips scroll-x">' + chipRow(CATEGORIES, state.filters.cat, 'filter-cat', { allLabel: 'Alles' }) + '</div>' +
         (state.filtersOpen ? filterPanel() : '') +
       '</div>' +
+      vakBanner() +
       '<div id="grid" class="grid">' + gridHtml() + '</div>';
+  }
+
+  /* Laat zien waar je naar kijkt, en waar nog wat ligt. Zonder dit lijkt
+     kleding die in de was ligt spoorloos. */
+  function vakBanner() {
+    var f = state.filters;
+    if (f.vak === 'laundry') {
+      return '<div class="vak-banner">🧺 Je kijkt naar de wasmand.' +
+        '<button type="button" class="btn btn-ghost" data-act="filter-vak" data-val="kast">Terug naar de kast</button></div>';
+    }
+    if (f.vak === 'donate') {
+      return '<div class="vak-banner">🎁 Je kijkt naar de doneerstapel.' +
+        '<button type="button" class="btn btn-ghost" data-act="filter-vak" data-val="kast">Terug naar de kast</button></div>';
+    }
+    var was = laundryItems().length;
+    if (!was) return '';
+    return '<div class="vak-banner subtle">🧺 ' + plural(was, 'stuk ligt', 'stukken liggen') + ' in de was.' +
+      '<button type="button" class="btn btn-ghost" data-act="filter-vak" data-val="laundry">Bekijken</button></div>';
   }
 
   function filterPanel() {
@@ -987,11 +1128,17 @@
         '<div class="chips">' + chipRow(SEASONS, f.season, 'filter-season', { allLabel: 'Alle' }) + '</div></div>' +
       '<div class="filter-group"><span class="filter-label">Kleur</span>' +
         '<div class="chips">' + chipRow(COLORS, f.color, 'filter-color', { allLabel: 'Alle' }) + '</div></div>' +
+      (allTags().length
+        ? '<div class="filter-group"><span class="filter-label">Label</span>' +
+            '<div class="chips">' + chipRow(allTags().map(function (t) { return { key: t, label: t }; }),
+              f.tag, 'filter-tag', { allLabel: 'Alle' }) + '</div></div>'
+        : '') +
       '<div class="filter-group"><span class="filter-label">Tonen</span>' +
         '<div class="chips">' +
           '<button type="button" class="chip' + (f.fav ? ' active' : '') + '" data-act="filter-fav">★ Favorieten</button>' +
           '<button type="button" class="chip' + (f.unworn ? ' active' : '') + '" data-act="filter-unworn">Nooit gedragen</button>' +
-          '<button type="button" class="chip' + (f.donate ? ' active' : '') + '" data-act="filter-donate">🎁 Doneerstapel</button>' +
+          '<button type="button" class="chip' + (f.vak === 'laundry' ? ' active' : '') + '" data-act="filter-vak" data-val="laundry">🧺 In de was</button>' +
+          '<button type="button" class="chip' + (f.vak === 'donate' ? ' active' : '') + '" data-act="filter-vak" data-val="donate">🎁 Doneerstapel</button>' +
         '</div></div>' +
       '<div class="filter-group"><span class="filter-label">Sorteren</span>' +
         '<div class="chips">' + chipRow([
@@ -1021,6 +1168,7 @@
           (it.favorite ? '<span class="tile-fav">★</span>' : '') +
           (extra > 1 ? '<span class="tile-count">' + extra + ' 📷</span>' : '') +
           (it.rating ? '<span class="tile-rating">' + it.rating + '</span>' : '') +
+          (it.laundry && !it.donate ? '<span class="tile-badge wash">🧺 in de was</span>' : '') +
           (!it.name ? '<span class="tile-badge">nog invullen</span>' : '') +
         '</div>' +
         '<div class="tile-body">' +
@@ -1087,7 +1235,13 @@
             (it.favorite ? '★' : '☆') + '</button>' +
         '</div>' +
         '<div class="meta-list">' + rows + '</div>' +
+        ((it.tags || []).length
+          ? '<div class="pill-list big">' + it.tags.map(function (t) {
+              return '<span class="pill">' + esc(t) + '</span>';
+            }).join('') + '</div>'
+          : '') +
         (it.notes ? '<p class="notes">' + esc(it.notes) + '</p>' : '') +
+        (it.laundry && !it.donate ? '<div class="banner">🧺 Dit stuk ligt in de was.</div>' : '') +
         (it.donate
           ? '<div class="banner">🎁 Dit stuk ligt op de doneerstapel.</div>' +
             '<button class="btn btn-secondary btn-block" data-act="undonate-item" data-id="' + esc(it.id) + '">Terug in de kast</button>'
@@ -1098,7 +1252,10 @@
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(it, 'rate-item') +
         (!it.donate
-          ? '<button class="btn btn-ghost btn-block" data-act="donate-item" data-id="' + esc(it.id) + '">🎁 Naar de doneerstapel</button>'
+          ? (it.laundry
+              ? '<button class="btn btn-secondary btn-block" data-act="unlaundry-item" data-id="' + esc(it.id) + '">🧺 Uit de was halen</button>'
+              : '<button class="btn btn-secondary btn-block" data-act="laundry-item" data-id="' + esc(it.id) + '">🧺 In de was</button>') +
+            '<button class="btn btn-ghost btn-block" data-act="donate-item" data-id="' + esc(it.id) + '">🎁 Naar de doneerstapel</button>'
           : '') +
 
         (inOutfits.length
@@ -1221,7 +1378,36 @@
         '<div class="chips">' + chipRow(CATEGORIES, it.category, 'draft-cat') + '</div></div>' +
 
       '<div class="field"><label>Kleur <span class="hint">(meerdere mogelijk)</span></label>' +
+        (d.photos.length
+          ? '<button type="button" class="btn btn-secondary btn-block detect-btn" data-act="detect-colors">' +
+              '🎨 Kleur uit de foto halen</button>'
+          : '') +
         '<div class="chips">' + chipRow(COLORS, it.colors, 'draft-color') + '</div></div>' +
+
+      '<div class="field"><label for="f-tag">Labels <span class="hint">(eigen woorden)</span></label>' +
+        (it.tags.length
+          ? '<div class="chips tag-chips">' + it.tags.map(function (t) {
+              return '<span class="chip active">' + esc(t) +
+                '<button type="button" class="tag-x" data-act="remove-tag" data-val="' + esc(t) + '" ' +
+                'aria-label="Label verwijderen">×</button></span>';
+            }).join('') + '</div>'
+          : '') +
+        '<div class="tag-row">' +
+          '<input id="f-tag" class="input" type="text" placeholder="Bijv. comfy" ' +
+            'autocomplete="off" maxlength="24">' +
+          '<button type="button" class="btn btn-secondary" data-act="add-tag">Toevoegen</button>' +
+        '</div>' +
+        (function () {
+          var voorstel = allTags().filter(function (t) {
+            return it.tags.map(function (x) { return x.toLowerCase(); }).indexOf(t.toLowerCase()) === -1;
+          }).slice(0, 8);
+          return voorstel.length
+            ? '<div class="chips">' + voorstel.map(function (t) {
+                return '<button type="button" class="chip" data-act="pick-tag" data-val="' + esc(t) + '">+ ' + esc(t) + '</button>';
+              }).join('') + '</div>'
+            : '';
+        })() +
+      '</div>' +
 
       '<div class="field"><label>Seizoen <span class="hint">(leeg = hele jaar)</span></label>' +
         '<div class="chips">' + chipRow(SEASONS, it.seasons, 'draft-season') + '</div></div>' +
@@ -1554,6 +1740,7 @@
 
   function suggestOutfit() {
     var pool = state.items.filter(function (it) {
+      if (bucketOf(it) !== 'kast') return false;   // in de was of weg: niet beschikbaar
       return itemMatchesSeason(it, (state.draft.data.seasons || [])[0] || '');
     });
     var picked = [];
@@ -1937,6 +2124,7 @@
   function itemPickerBody() {
     var byCat = {};
     state.items.forEach(function (it) {
+      if (it.donate) return;   // wat weggegeven wordt kies je niet meer
       (byCat[it.category] = byCat[it.category] || []).push(it);
     });
     var body = CATEGORIES.filter(function (c) { return byCat[c.key] && byCat[c.key].length; })
@@ -2419,10 +2607,70 @@
     'filter-sort': function (btn) { state.filters.sort = btn.getAttribute('data-val'); render(); },
     'filter-fav': function () { state.filters.fav = !state.filters.fav; render(); },
     'filter-unworn': function () { state.filters.unworn = !state.filters.unworn; render(); },
-    'filter-donate': function () { state.filters.donate = !state.filters.donate; render(); },
-    'filter-reset': function () {
-      state.filters = { q: state.filters.q, cat: '', season: '', color: '', fav: false, unworn: false, donate: false, sort: 'recent' };
+    'filter-vak': function (btn) {
+      var val = btn.getAttribute('data-val');
+      state.filters.vak = state.filters.vak === val ? 'kast' : val;
       render();
+    },
+    'filter-tag': function (btn) { state.filters.tag = btn.getAttribute('data-val'); render(); },
+    'filter-reset': function () {
+      state.filters = { q: state.filters.q, cat: '', season: '', color: '', tag: '',
+                        fav: false, unworn: false, vak: 'kast', sort: 'recent' };
+      render();
+    },
+
+    /* Labels */
+    'add-tag': function () { addTagFromInput(); },
+    'pick-tag': function (btn) { addTag(btn.getAttribute('data-val')); },
+    'remove-tag': function (btn) {
+      var d = state.draft;
+      if (!d || d.kind !== 'item') return;
+      var val = btn.getAttribute('data-val').toLowerCase();
+      syncItemDraftFromDom();
+      d.data.tags = d.data.tags.filter(function (t) { return t.toLowerCase() !== val; });
+      render();
+    },
+
+    /* Wasmand */
+    'laundry-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.laundry = true;
+      await saveItem(it);
+      render();
+      toast('In de was gelegd');
+    },
+    'unlaundry-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.laundry = false;
+      await saveItem(it);
+      render();
+      toast('Weer schoon en beschikbaar');
+    },
+
+    'detect-colors': async function () {
+      var d = state.draft;
+      if (!d || d.kind !== 'item') return;
+      syncItemDraftFromDom();
+      var cover = null;
+      d.photos.forEach(function (p) { if (p.id === d.cover) cover = p; });
+      if (!cover) cover = d.photos[0];
+      if (!cover) { toast('Voeg eerst een foto toe'); return; }
+      toast('Kleur zoeken…');
+      try {
+        var blob = cover.blobs ? cover.blobs.thumb : await getImageBlob(cover.id, 'thumb');
+        if (!blob) { toast('Kon de foto niet lezen'); return; }
+        var bmp = await loadBitmap(blob);
+        var kleuren = detectColors(bmp);
+        if (bmp.close) bmp.close();
+        if (!kleuren.length) { toast('Geen duidelijke kleur gevonden'); return; }
+        d.data.colors = kleuren;
+        render();
+        toast('Uit de foto: ' + kleuren.map(colorLabel).join(' en '));
+      } catch (err) {
+        toast('Kon de kleur niet bepalen');
+      }
     },
 
     /* Cijfers van Askim en de doneerstapel */
@@ -2490,6 +2738,7 @@
       var it = getItem(btn.getAttribute('data-id'));
       if (!it) return;
       it.donate = true;
+      it.laundry = false;   // weggeven gaat voor wassen
       await saveItem(it);
       render();
       toast('Op de doneerstapel gelegd');
@@ -2873,8 +3122,36 @@
     }
   }
 
+  function addTag(raw) {
+    var d = state.draft;
+    if (!d || d.kind !== 'item') return;
+    syncItemDraftFromDom();
+    // Meerdere labels in één keer mag: "comfy, werk"
+    String(raw).split(',').forEach(function (stuk) {
+      var t = stuk.trim().replace(/\s+/g, ' ').slice(0, 24);
+      if (!t) return;
+      var bestaat = d.data.tags.some(function (x) { return x.toLowerCase() === t.toLowerCase(); });
+      if (!bestaat) d.data.tags.push(t);
+    });
+    render();
+    var veld = document.getElementById('f-tag');
+    if (veld) { veld.value = ''; veld.focus(); }
+  }
+
+  function addTagFromInput() {
+    var veld = document.getElementById('f-tag');
+    if (!veld || !veld.value.trim()) return;
+    addTag(veld.value);
+  }
+
   /* Escape sluit wat er open staat — op een pc verwacht je dat. */
   function onKeydown(ev) {
+    // Enter in het labelveld voegt toe in plaats van het formulier te versturen.
+    if (ev.key === 'Enter' && ev.target && ev.target.id === 'f-tag') {
+      ev.preventDefault();
+      addTagFromInput();
+      return;
+    }
     if (ev.key !== 'Escape' || els.overlay.hidden) return;
     var dialog = els.overlay.querySelector('[data-dlg]');
     if (dialog) {
@@ -2894,17 +3171,25 @@
     toast(files.length > 1 ? files.length + ' foto\'s verwerken…' : 'Foto verwerken…');
     var d = state.draft;
     var added = 0;
+    var herkend = null;
     for (var i = 0; i < files.length; i++) {
       try {
         var processed = await processImage(files[i]);
         var imgId = uid('img');
         d.photos.push({ id: imgId, url: URL.createObjectURL(processed.thumb), blobs: processed });
         if (!d.cover) d.cover = imgId;
+        // Alleen invullen als er nog niets gekozen is; een eigen keuze
+        // overschrijven zou vervelend zijn.
+        if (!d.data.colors.length && processed.colors.length) {
+          d.data.colors = processed.colors.slice();
+          herkend = processed.colors.slice();
+        }
         added++;
       } catch (err) { /* sla onleesbare bestanden over */ }
     }
     render();
     if (!added) toast('Kan deze foto niet gebruiken');
+    else if (herkend) toast('Kleur uit de foto: ' + herkend.map(colorLabel).join(' en '));
   }
 
   async function onBulkChosen(ev) {
@@ -2922,6 +3207,7 @@
         item.imageIds = [imgId];
         item.coverImageId = imgId;
         item.category = 'overig';
+        item.colors = processed.colors.slice();   // scheelt handwerk bij bulk
         await saveItem(item);
         made++;
       } catch (err) { /* sla onleesbare bestanden over */ }

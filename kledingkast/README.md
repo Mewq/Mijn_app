@@ -34,9 +34,15 @@ internet.
 - Meerdere foto's tegelijk inladen met de knop ⧉ rechtsboven; elke foto wordt
   dan een apart kledingstuk dat je later een naam geeft. Die krijgen het label
   "nog invullen" zolang de naam leeg is.
-- Zoeken op naam, merk, kleur of categorie, en filteren op categorie, seizoen,
-  kleur, favorieten of "nooit gedragen". Sorteren op nieuwste, naam, het cijfer
-  van Askim of hoe vaak je iets draagt.
+- **Kleur wordt uit de foto herkend.** Voeg je een foto toe en heb je nog geen
+  kleur aangetikt, dan vult de app die zelf in. Een eigen keuze wordt nooit
+  overschreven, en met "🎨 Kleur uit de foto halen" doe je het alsnog of opnieuw.
+  Is er geen kleur die overheerst, dan wordt het "Print".
+- **Labels** in je eigen woorden — "comfy", "te klein", "cadeau van mama".
+  Eerder gebruikte labels worden voorgesteld, en je kunt erop filteren en zoeken.
+- Zoeken op naam, merk, kleur, label of categorie, en filteren op categorie,
+  seizoen, kleur, label, favorieten of "nooit gedragen". Sorteren op nieuwste,
+  naam, het cijfer van Askim of hoe vaak je iets draagt.
 - **Dupliceren** is handig voor hetzelfde stuk in een andere kleur of maat. De
   foto's worden echt gekopieerd, niet gedeeld — verwijder je het origineel, dan
   houdt de kopie gewoon haar eigen foto's.
@@ -80,6 +86,15 @@ internet.
   kleur, wat je het meest draagt en wat nog nooit aan is geweest.
 - Op een kledingstuk laat **"Combineer je met"** zien wat je er in de praktijk
   het vaakst bij draagt, afgeleid uit je outfits.
+
+**In de was**
+- Een stuk dat gewassen moet worden leg je met één tik in de wasmand. Het valt
+  dan uit je kast en doet niet mee met "🎲 Verras me" — het is immers even niet
+  beschikbaar.
+- Bovenaan de kast staat dan hoeveel er in de was ligt, met een knop om die
+  stapel te bekijken. Zo raakt er niets zoek.
+- Kast, wasmand en doneerstapel zijn drie aparte vakken; een stuk zit altijd in
+  precies één ervan. Iets doneren haalt het vanzelf uit de wasmand.
 
 **Doneren**
 - Kleding die je niet meer wilt dragen leg je op de doneerstapel, vanaf het
@@ -180,6 +195,12 @@ van de telefoon van enkele megabytes wordt zo een paar honderd kilobyte.
 Een kledingstuk bewaart zijn foto's als `imageIds` met daarnaast een
 `coverImageId` voor de hoofdfoto. Back-ups uit een eerdere versie hadden één
 `imageId`; die worden bij het inladen automatisch omgezet.
+
+Kleurherkenning gebeurt lokaal op een canvas van 56×72 pixels. Elke pixel gaat
+van sRGB naar Lab voordat hij bij het palet wordt gezocht: in RGB liggen zwart
+en donkergrijs dicht bij elkaar terwijl ze er duidelijk anders uitzien. Het
+midden van de foto telt drie keer zo zwaar, want daar hangt het kledingstuk en
+niet de vloer of de muur. Overheerst geen enkele kleur, dan wordt het "Print".
 
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`
