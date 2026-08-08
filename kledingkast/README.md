@@ -41,6 +41,11 @@ internet.
 **Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
   gelegenheid, seizoen en notities.
+- Zoeken op naam of op een kledingstuk dat erin zit, filteren op gelegenheid en
+  op wie hem maakte, en sorteren op nieuwste of op het cijfer van Askim.
+- **Dupliceren** maakt een kopie die meteen openklapt om aan te passen — handig
+  voor een variant op een outfit die al werkt. De kopie begint zonder cijfer en
+  zonder draaggeschiedenis.
 - "🎲 Verras me" stelt zelf een combinatie voor: een bovenstuk, een onderstuk en
   waar mogelijk schoenen, een jas en een accessoire.
 - In een **map** verzamel je outfits die bij elkaar horen — bijvoorbeeld
@@ -52,8 +57,10 @@ internet.
 **Bijhouden**
 - "Vandaag gedragen" op een kledingstuk of outfit houdt bij hoe vaak en wanneer
   je iets draagt. Bij een outfit telt dat door naar alle stukken erin.
-- Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie, wat je het
-  meest draagt en wat nog nooit aan is geweest.
+- Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie en per
+  kleur, wat je het meest draagt en wat nog nooit aan is geweest.
+- Op een kledingstuk laat **"Combineer je met"** zien wat je er in de praktijk
+  het vaakst bij draagt, afgeleid uit je outfits.
 
 **Doneren**
 - Kleding die je niet meer wilt dragen leg je op de doneerstapel, vanaf het
@@ -79,20 +86,37 @@ Jij sorteert daarna je kast én je outfitlijst op "💛 Cijfer van Askim" om te 
 wat zij het leukst vindt. Cijfers staan als badge op de tegels en zijn vanaf elk
 detailscherm aan te passen of te wissen.
 
-### Samen werken via een back-up
+### Samen werken
 
-Jullie telefoons delen niets automatisch; het gaat via één bestand.
+Jullie telefoons delen niets automatisch. De heenweg gaat één keer via een
+bestand (daar zitten de foto's in), de terugweg kan als tekstcode.
 
-1. Jij: **Meer → Back-up downloaden**, en stuur het bestand naar haar.
+1. Jij: **Meer → Back-up delen** (of downloaden) en stuur hem naar haar.
 2. Zij: **Meer → Back-up terugzetten → "Alles terugzetten"**. Nu staat jouw kast
    op haar telefoon.
-3. Zij geeft cijfers en maakt outfits, en stuurt daarna haar eigen back-up terug.
-4. Jij: **Back-up terugzetten → "Alleen Askims keuzes"**. Dan komen alleen haar
-   cijfers (voor kleding én outfits), doneerkeuzes en nieuwe outfits binnen.
-   Kleding die jij ondertussen hebt toegevoegd, je foto's en je eigen gegevens
-   blijven ongemoeid.
+3. Zij geeft cijfers en maakt outfits.
+4. Zij: **Askim → Keuzes kopiëren als code**, en plakt die code in WhatsApp.
+5. Jij: **Meer → Keuzes plakken**, code erin, klaar.
 
-Stap 4 is het verschil tussen de twee keuzes in het dialoogvenster:
+Stap 4 en 5 gaan zonder bestand — zie hieronder. Wil je liever met bestanden
+werken, dan kan zij ook een volledige back-up terugsturen; kies dan bij het
+terugzetten **"Alleen Askims keuzes"** in plaats van "Alles terugzetten".
+
+## Delen zonder bestanden
+
+Niet alles hoeft via de Bestanden-app.
+
+- **Keuzes als code.** Cijfers, doneerkeuzes en outfits zijn platte tekst zonder
+  foto's. De app zet ze samengeperst om in een code als `KAST1Z…` van een paar
+  honderd tekens, die je gewoon in een berichtje plakt. Kopiëren gaat met één
+  tik naar het klembord; aan de andere kant plak je hem bij **Keuzes plakken**.
+  Dat voegt samen — je eigen kleding en foto's blijven zoals ze zijn.
+- **Back-up delen.** Op een telefoon opent **Back-up delen** het gewone
+  deelmenu, zodat het bestand rechtstreeks naar WhatsApp of AirDrop gaat zonder
+  eerst ergens te landen. Kan de browser dat niet, dan valt hij terug op
+  downloaden.
+
+Het verschil tussen de twee keuzes bij het terugzetten van een bestand:
 "Alles terugzetten" overschrijft records met hetzelfde id (bedoeld voor een
 verhuizing naar een nieuwe telefoon), "Alleen Askims keuzes" voegt samen.
 
@@ -104,6 +128,18 @@ dan is de kast weg.
 
 Onder **Meer → Back-up** download je één JSON-bestand met alles erin, foto's
 inbegrepen. Maak die back-up af en toe.
+
+## Op de telefoon en op de pc
+
+Dezelfde HTML, twee indelingen. Op een smal scherm staat de navigatie onderaan
+als tabbalk en is het raster twee kolommen breed. Vanaf 900 px wordt diezelfde
+tabbalk een zijbalk links, groeit het raster naar vier of vijf kolommen, en
+komen op een detailscherm de foto en de gegevens naast elkaar te staan met de
+foto meescrollend in beeld. Muisaanwijzers krijgen hover-feedback die op touch
+niets in de weg zit.
+
+Onder **Meer → Weergave** kies je het thema: systeem, licht of donker. Die keuze
+wordt onthouden en al vóór het tekenen toegepast, zodat er niets flikkert.
 
 ## Onder de motorkap
 
@@ -125,6 +161,12 @@ van de telefoon van enkele megabytes wordt zo een paar honderd kilobyte.
 Een kledingstuk bewaart zijn foto's als `imageIds` met daarnaast een
 `coverImageId` voor de hoofdfoto. Back-ups uit een eerdere versie hadden één
 `imageId`; die worden bij het inladen automatisch omgezet.
+
+Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
+komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`
+rekt alleen de root op, niet de scrollende containers ertussen. De waarnemer
+krijgt daarom de echte scrollcontainer (`.view` of `.sheet-body`) als root — met
+de standaardroot laadt niets onder de vouw.
 
 Pas je `app.js`, `style.css`, `db.js` of `index.html` aan, verhoog dan het
 versienummer `CACHE` bovenin `sw.js`. Anders blijven bezoekers de oude versie

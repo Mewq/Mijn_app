@@ -11,14 +11,18 @@
   --accent: #a9683c;
   --accent-soft: #f6ebe2;
   --danger: #b03a34;
+  --on-accent: #ffffff;
   --shadow: 0 1px 2px rgba(38, 34, 32, .05), 0 6px 18px rgba(38, 34, 32, .06);
   --radius: 14px;
   --radius-sm: 10px;
   --tap: 44px;
 }
 
+/* Donkere tokens staan één keer beschreven en worden op twee manieren
+   ingeschakeld: het systeemthema (tenzij de gebruiker expliciet licht koos)
+   en de handmatige keuze in Meer. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #17161a;
     --surface: #201f24;
     --surface-2: #2a282f;
@@ -30,7 +34,23 @@
     --accent-soft: #33281f;
     --danger: #e07b74;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .28);
+    --on-accent: #1d1712;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #17161a;
+  --surface: #201f24;
+  --surface-2: #2a282f;
+  --ink: #f0ece7;
+  --ink-soft: #b3aca5;
+  --ink-faint: #837d78;
+  --line: #35323a;
+  --accent: #e0a075;
+  --accent-soft: #33281f;
+  --danger: #e07b74;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .28);
+  --on-accent: #1d1712;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -177,8 +197,7 @@ input, textarea, select { font: inherit; }
 }
 
 .btn:active { transform: scale(.985); }
-.btn-primary { background: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) { .btn-primary { color: #1d1712; } }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
 .btn-secondary { border-color: var(--line); background: var(--surface); }
 .btn-ghost { color: var(--accent); }
 .btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
@@ -263,6 +282,9 @@ input, textarea, select { font: inherit; }
   border: 1px solid rgba(128, 128, 128, .35);
   flex: none;
 }
+
+/* Onder de segmentkiezer scrollt de balk mee; alleen de kast plakt bovenaan. */
+.toolbar.sub { position: static; border-bottom: 0; padding-top: 12px; }
 
 .filter-panel {
   margin-top: 10px;
@@ -423,7 +445,9 @@ input, textarea, select { font: inherit; }
 
 .meta-row { display: flex; gap: 12px; padding: 10px 13px; }
 .meta-row + .meta-row { border-top: 1px solid var(--line); }
-.meta-key { color: var(--ink-faint); font-size: 13.5px; flex: 0 0 96px; }
+/* Vaste breedte brak op langere labels ("Cijfer van Askim"); nu groeit de
+   kolom mee en blijft de waarde rechts uitgelijnd. */
+.meta-key { color: var(--ink-faint); font-size: 13.5px; flex: 0 0 auto; min-width: 96px; white-space: nowrap; }
 .meta-val { font-size: 13.5px; text-align: right; margin-left: auto; }
 
 .notes {
@@ -682,7 +706,7 @@ input, textarea, select { font: inherit; }
   border: 1px solid rgba(0, 0, 0, .12);
 }
 
-.picker-tile.selected .pick-mark { background: var(--accent); color: #fff; border-color: transparent; }
+.picker-tile.selected .pick-mark { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 .picker-tile.selected .tile-photo { outline: 3px solid var(--accent); outline-offset: -3px; }
 
 .dialog {
@@ -915,7 +939,7 @@ input, textarea, select { font: inherit; }
 
 .assign-row.selected { border-color: var(--accent); background: var(--accent-soft); }
 .assign-row .pick-mark { position: static; margin-left: auto; }
-.assign-row.selected .pick-mark { background: var(--accent); color: #fff; border-color: transparent; }
+.assign-row.selected .pick-mark { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 .assign-icon { font-size: 24px; width: 46px; text-align: center; flex: none; }
 
 /* ───────────────────── Cijfers van Askim (1 t/m 10) ────────────────────── */
@@ -938,8 +962,7 @@ input, textarea, select { font: inherit; }
 }
 
 .rate-btn:active { transform: scale(.95); }
-.rate-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) { .rate-btn.active { color: #1d1712; } }
+.rate-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .rate-label { font-size: 14px; font-weight: 600; text-align: center; margin: 12px 0 2px; }
 
@@ -955,13 +978,11 @@ input, textarea, select { font: inherit; }
   justify-content: center;
   border-radius: 100px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
 }
-
-@media (prefers-color-scheme: dark) { .tile-rating { color: #1d1712; } }
 
 /* ──────────────────────────── Sectie Mijn Askim ────────────────────────── */
 
@@ -1048,6 +1069,140 @@ input, textarea, select { font: inherit; }
 .choice b { font-size: 15px; }
 .choice span { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
 .dialog-actions .btn-block { margin-top: 0; }
+
+/* ─────────────────────── Thema- en instellingsrijen ───────────────────── */
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+}
+
+.setting-row > span { flex: 1; font-size: 14.5px; }
+.setting-row .seg { display: flex; gap: 4px; padding: 3px; background: var(--surface-2); border-radius: 100px; }
+
+.seg-btn {
+  border: 0;
+  background: transparent;
+  border-radius: 100px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.seg-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
+.code-box {
+  width: 100%;
+  min-height: 110px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
+  resize: vertical;
+}
+
+.sheet-intro { padding: 14px 14px 0; font-size: 14px; color: var(--ink-soft); }
+.sheet-form { padding: 12px 14px; }
+.sheet-form .btn-block:first-of-type { margin-top: 12px; }
+
+/* ──────────────────────── Bureaublad: zijbalk ─────────────────────────── */
+
+@media (min-width: 900px) {
+  /* Zelfde HTML, andere plattegrond: de tabbalk wordt een zijbalk. */
+  .app {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "nav top" "nav view";
+    max-width: 1240px;
+    border-inline: 1px solid var(--line);
+  }
+
+  .topbar { grid-area: top; padding: 14px 24px; }
+  .topbar-title { text-align: left; font-size: 20px; }
+  .view { grid-area: view; padding-bottom: 40px; }
+
+  .tabbar {
+    grid-area: nav;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+    padding: 18px 12px;
+    border-top: 0;
+    border-right: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  .tab {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .tab:hover { background: var(--surface-2); }
+  .tab.active { background: var(--accent-soft); }
+  .tab-icon { font-size: 20px; }
+
+  /* Op een breed scherm past er veel meer naast elkaar. */
+  .grid { grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 20px 24px; }
+  .grid-picker { grid-template-columns: repeat(4, 1fr); }
+  .grid-small { grid-template-columns: repeat(6, 1fr); }
+  .toolbar { padding: 14px 24px 10px; }
+  .search { max-width: 520px; }
+  .scroll-x { margin-inline: -24px; padding-inline: 24px; }
+  .page, .form { padding: 20px 24px; max-width: 760px; }
+  .list-cards { padding: 20px 24px; display: grid; grid-template-columns: repeat(2, 1fr); align-items: start; }
+  .list-cards.flush { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .segment, .sort-chips { margin-inline: 24px; max-width: 420px; }
+  .sort-chips { padding-inline: 0; }
+
+  /* Detail: foto links, gegevens rechts. */
+  .detail {
+    display: grid;
+    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+    padding: 20px 24px;
+    max-width: 900px;
+  }
+
+  .detail-photo { padding: 0; position: sticky; top: 20px; }
+  .detail-body { padding: 0; }
+  .stat-grid { grid-template-columns: repeat(3, 1fr); }
+  .rate-row { max-width: 460px; }
+  .dialog { max-width: 420px; }
+  .sheet { border-radius: 20px; max-height: 82dvh; margin-bottom: 4vh; }
+  .overlay { align-items: center; }
+  .askim-card { max-width: 520px; }
+  .toast { bottom: 28px; }
+}
+
+@media (min-width: 1180px) {
+  .grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+/* Muisaanwijzers krijgen wat feedback; touch heeft daar niets aan. */
+@media (hover: hover) {
+  .tile:hover .tile-photo, .outfit-card:hover { box-shadow: var(--shadow-hover, 0 6px 22px rgba(38, 34, 32, .13)); }
+  .tile:hover .tile-name { color: var(--accent); }
+  .list-item:hover, .assign-row:hover { border-color: var(--accent); }
+  .chip:hover:not(.active) { border-color: var(--ink-faint); }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .rate-btn:hover { border-color: var(--accent); color: var(--accent); }
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }

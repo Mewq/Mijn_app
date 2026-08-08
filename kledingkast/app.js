@@ -95,7 +95,8 @@
     assignFor: null,      // outfit waarvoor we mappen aanvinken
     askimSkipped: [],     // deze sessie overgeslagen in de beoordeelrij
     askimRateMode: 'items', // beoordeelt Askim nu kleding of outfits?
-    outfitSort: 'recent'
+    outfitSort: 'recent',
+    outfitFilter: { q: '', occasion: '', author: '' }
   };
 
   var els = {};
@@ -149,6 +150,31 @@
   }
 
   function go(hash) { location.hash = hash; }
+
+  /* ──────────────────────────────── Thema ────────────────────────────────
+     'systeem' volgt de telefoon; 'licht' en 'donker' overrulen dat. */
+
+  var THEME_KEY = 'kledingkast-thema';
+
+  function currentTheme() {
+    try { return localStorage.getItem(THEME_KEY) || 'systeem'; }
+    catch (e) { return 'systeem'; }
+  }
+
+  function setTheme(t) {
+    try {
+      if (t === 'systeem') localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, t);
+    } catch (e) { /* privémodus: dan geldt de keuze alleen deze sessie */ }
+    applyTheme(t);
+  }
+
+  function applyTheme(t) {
+    var root = document.documentElement;
+    if (t === 'licht') root.setAttribute('data-theme', 'light');
+    else if (t === 'donker') root.setAttribute('data-theme', 'dark');
+    else root.removeAttribute('data-theme');
+  }
 
   /* ───────────────────────────── Afbeeldingen ────────────────────────────── */
 
@@ -222,19 +248,57 @@
     });
   }
 
+  function loadImgEl(img) {
+    var parts = img.getAttribute('data-img').split(':');
+    imageUrl(parts[0], parts[1] || 'thumb').then(function (url) {
+      if (!url) return;
+      img.src = url;
+      img.classList.add('loaded');
+      // De categorie-emoji eronder uitfaden, anders schemert die door de foto.
+      if (img.parentNode) img.parentNode.classList.add('has-photo');
+    });
+  }
+
+  var observers = new Map();
+
+  /* rootMargin rekt alleen de root van de waarnemer op, niet de scrollende
+     containers daartussen. Een raster dat in .view scrolt heeft dus een
+     waarnemer nodig met .view als root, anders laadt niets onder de vouw. */
+  function observerFor(scroller) {
+    var key = scroller || 'venster';
+    if (!observers.has(key)) {
+      observers.set(key, new IntersectionObserver(function (entries, obs) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          obs.unobserve(e.target);
+          loadImgEl(e.target);
+        });
+      }, { root: scroller || null, rootMargin: '600px 0px' }));
+    }
+    return observers.get(key);
+  }
+
+  /* Foto's pas uit de database halen als ze in de buurt van het scherm komen.
+     Bij een kast van honderden stukken scheelt dat evenveel blob-URL's. */
   function hydrateImages(root) {
     var nodes = (root || document).querySelectorAll('img[data-img]');
     Array.prototype.forEach.call(nodes, function (img) {
       if (img.getAttribute('data-img-done')) return;
       img.setAttribute('data-img-done', '1');
-      var parts = img.getAttribute('data-img').split(':');
-      imageUrl(parts[0], parts[1] || 'thumb').then(function (url) {
-        if (!url) return;
-        img.src = url;
-        img.classList.add('loaded');
-        // De categorie-emoji eronder uitfaden, anders schemert die door de foto.
-        if (img.parentNode) img.parentNode.classList.add('has-photo');
-      });
+      if (typeof IntersectionObserver !== 'function' || !img.closest) {
+        loadImgEl(img);
+        return;
+      }
+      observerFor(img.closest('.view, .sheet-body')).observe(img);
+    });
+  }
+
+  /* Waarnemers van gesloten panelen opruimen; die van .view blijft. */
+  function pruneObservers() {
+    observers.forEach(function (obs, key) {
+      if (key === 'venster' || key === els.view || document.contains(key)) return;
+      obs.disconnect();
+      observers['delete'](key);
     });
   }
 
@@ -793,6 +857,7 @@
           ? '<h3 class="section-title">In outfits (' + inOutfits.length + ')</h3>' +
             '<div class="list">' + inOutfits.map(outfitRowHtml).join('') + '</div>'
           : '') +
+        combinesWithHtml(it) +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/item/' + esc(it.id) + '/edit">Bewerken</a>' +
           '<button class="btn btn-danger" data-act="delete-item" data-id="' + esc(it.id) + '">Verwijderen</button>' +
@@ -802,6 +867,32 @@
 
   function metaRow(key, val) {
     return '<div class="meta-row"><span class="meta-key">' + esc(key) + '</span><span class="meta-val">' + esc(val) + '</span></div>';
+  }
+
+  /* Wat draag je hier meestal bij? Afgeleid uit de outfits waar dit stuk in zit. */
+  function combinesWithHtml(it) {
+    var tally = {};
+    state.outfits.forEach(function (o) {
+      if (o.itemIds.indexOf(it.id) === -1) return;
+      o.itemIds.forEach(function (id) {
+        if (id !== it.id) tally[id] = (tally[id] || 0) + 1;
+      });
+    });
+    var others = Object.keys(tally)
+      .map(function (id) { return { item: getItem(id), n: tally[id] }; })
+      .filter(function (x) { return x.item && !x.item.donate; })
+      .sort(function (a, b) { return b.n - a.n; })
+      .slice(0, 6);
+    if (!others.length) return '';
+
+    return '<h3 class="section-title">Combineer je met</h3>' +
+      '<div class="grid grid-small">' + others.map(function (x) {
+        return '<a class="tile" href="#/item/' + esc(x.item.id) + '">' +
+          '<div class="tile-media">' + itemThumb(x.item) +
+            (x.n > 1 ? '<span class="tile-count">' + x.n + '×</span>' : '') + '</div>' +
+          '<div class="tile-body"><span class="tile-name">' + esc(x.item.name || 'Naamloos') + '</span></div>' +
+        '</a>';
+      }).join('') + '</div>';
   }
 
   /* Knoppen 1 t/m 10 waarmee Askim een kledingstuk of outfit een cijfer geeft. */
@@ -961,13 +1052,55 @@
           ? '<button class="btn btn-primary" data-act="new-outfit">Outfit maken</button>'
           : '<button class="btn btn-primary" data-act="new-item">Kledingstuk toevoegen</button>');
     }
-    var sorted = sortedOutfits(state.outfits);
+    var f = state.outfitFilter;
     return segment('outfits') +
-      '<div class="chips sort-chips">' + chipRow([
-        { key: 'recent', label: 'Nieuwste' },
-        { key: 'rating', label: '💛 Cijfer van Askim' }
-      ], state.outfitSort, 'outfit-sort') + '</div>' +
-      '<div class="list list-cards">' + sorted.map(outfitCardHtml).join('') + '</div>';
+      '<div class="toolbar sub">' +
+        '<div class="search"><span class="search-icon">🔎</span>' +
+          '<input id="outfitSearch" class="search-input" type="search" ' +
+            'placeholder="Zoek op naam of kledingstuk" value="' + esc(f.q) + '">' +
+        '</div>' +
+        '<div class="chips scroll-x">' +
+          chipRow(OCCASIONS, f.occasion, 'outfit-occasion', { allLabel: 'Alle' }) +
+        '</div>' +
+        '<div class="chips scroll-x">' +
+          '<button type="button" class="chip' + (f.author === 'askim' ? ' active' : '') + '" ' +
+            'data-act="outfit-author" data-val="askim">💛 Van Askim</button>' +
+          '<button type="button" class="chip' + (f.author === 'ik' ? ' active' : '') + '" ' +
+            'data-act="outfit-author" data-val="ik">Van mij</button>' +
+          chipRow([
+            { key: 'recent', label: 'Nieuwste' },
+            { key: 'rating', label: '💛 Hoogste cijfer' }
+          ], state.outfitSort, 'outfit-sort') +
+        '</div>' +
+      '</div>' +
+      '<div id="outfitList">' + outfitListHtml() + '</div>';
+  }
+
+  function outfitListHtml() {
+    var f = state.outfitFilter;
+    var q = f.q.trim().toLowerCase();
+    var matched = state.outfits.filter(function (o) {
+      if (f.occasion && o.occasion !== f.occasion) return false;
+      if (f.author && o.author !== f.author) return false;
+      if (!q) return true;
+      var hay = [o.name, o.notes, (occasionMap[o.occasion] || {}).label]
+        .concat(o.itemIds.map(function (id) { return (getItem(id) || {}).name; }))
+        .join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    if (!matched.length) {
+      return '<div class="empty small"><div class="empty-icon">🔍</div>' +
+        '<p class="empty-text">Geen outfits met deze filters.</p>' +
+        '<button class="btn btn-ghost" data-act="outfit-filter-reset">Filters wissen</button></div>';
+    }
+    return '<div class="list list-cards">' + sortedOutfits(matched).map(outfitCardHtml).join('') + '</div>';
+  }
+
+  function refreshOutfitList() {
+    var el = document.getElementById('outfitList');
+    if (!el) return;
+    el.innerHTML = outfitListHtml();
+    hydrateImages(el);
   }
 
   function sortedOutfits(list) {
@@ -1068,6 +1201,7 @@
           : '<p class="empty-text">Deze outfit heeft nog geen kledingstukken.</p>') +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/outfit/' + esc(o.id) + '/edit">Bewerken</a>' +
+          '<button class="btn btn-secondary" data-act="duplicate-outfit" data-id="' + esc(o.id) + '">Dupliceren</button>' +
           '<button class="btn btn-danger" data-act="delete-outfit" data-id="' + esc(o.id) + '">Verwijderen</button>' +
         '</div>' +
       '</div></div>';
@@ -1335,6 +1469,12 @@
         ? plural(donate.length, 'kledingstuk ligt', 'kledingstukken liggen') + ' klaar om weg te geven.'
         : 'Nog niets om weg te geven.') + '</p>' +
       '<a class="btn btn-secondary btn-block" href="#/doneren">🎁 Doneerstapel bekijken</a>' +
+
+      '<h3 class="section-title">Klaar? Stuur je keuzes terug</h3>' +
+      '<p class="hint block">Je cijfers en outfits passen als tekstcode in een berichtje — ' +
+        'geen bestand nodig.</p>' +
+      '<button class="btn btn-primary btn-block" data-act="share-choices">📋 Keuzes kopiëren als code</button>' +
+      '<button class="btn btn-ghost btn-block" data-act="paste-choices">Keuzes plakken</button>' +
     '</div>';
   }
 
@@ -1449,18 +1589,52 @@
     showSheet('In een map zetten', folderPickerBody());
   }
 
-  function showSheet(title, body) {
+  function showSheet(title, body, footer) {
+    var foot = footer !== undefined ? footer :
+      '<button class="btn btn-primary btn-block" data-act="picker-done">' +
+        'Klaar (<span id="pickCount">' + state.pickerSel.length + '</span>)</button>';
     els.overlay.innerHTML = '<div class="sheet">' +
       '<div class="sheet-head"><h3>' + esc(title) + '</h3>' +
         '<button class="icon-btn" data-act="picker-close" aria-label="Sluiten">×</button></div>' +
       '<div class="sheet-body">' + body + '</div>' +
-      '<div class="sheet-foot">' +
-        '<button class="btn btn-primary btn-block" data-act="picker-done">' +
-          'Klaar (<span id="pickCount">' + state.pickerSel.length + '</span>)</button>' +
-      '</div></div>';
+      '<div class="sheet-foot">' + foot + '</div></div>';
     els.overlay.hidden = false;
     document.body.classList.add('locked');
     hydrateImages(els.overlay);
+  }
+
+  async function openShareCode() {
+    var payload = choicePayload();
+    if (!payload.items.length && !payload.outfits.length) {
+      toast('Nog geen cijfers of outfits om te delen');
+      return;
+    }
+    var code = await packCode(JSON.stringify(payload));
+    showSheet('Keuzes delen',
+      '<p class="sheet-intro">Deze code bevat de cijfers en doneerkeuzes van ' +
+        plural(payload.items.length, 'kledingstuk', 'kledingstukken') + ' en ' +
+        plural(payload.outfits.length, 'outfit', 'outfits') + '. Er zitten geen foto\'s in, ' +
+        'dus hij past gewoon in een berichtje. De ander kiest daar "Keuzes plakken".</p>' +
+      '<div class="sheet-form">' +
+        '<textarea id="shareCode" class="input code-box" readonly>' + esc(code) + '</textarea>' +
+      '</div>',
+      '<button class="btn btn-primary btn-block" data-act="copy-code">Kopieer naar klembord</button>' +
+      (navigator.share ? '<button class="btn btn-secondary btn-block" data-act="share-code">Delen…</button>' : '') +
+      '<button class="btn btn-ghost btn-block" data-act="picker-close">Sluiten</button>');
+  }
+
+  function openPasteCode() {
+    showSheet('Keuzes plakken',
+      '<p class="sheet-intro">Plak hier de code die je hebt gekregen. Alleen cijfers, ' +
+        'doneerkeuzes en outfits worden overgenomen — je eigen kleding en foto\'s blijven zoals ze zijn.</p>' +
+      '<div class="sheet-form">' +
+        '<textarea id="pasteCode" class="input code-box" placeholder="KAST1Z…" ' +
+          'autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>' +
+      '</div>',
+      '<button class="btn btn-primary btn-block" data-act="apply-code">Overnemen</button>' +
+      '<button class="btn btn-ghost btn-block" data-act="picker-close">Annuleren</button>');
+    var ta = document.getElementById('pasteCode');
+    if (ta) ta.focus();
   }
 
   function itemPickerBody() {
@@ -1537,6 +1711,7 @@
     els.overlay.hidden = true;
     els.overlay.innerHTML = '';
     document.body.classList.remove('locked');
+    pruneObservers();
   }
 
   /* ─────────────────────────────── Meer / back-up ────────────────────────── */
@@ -1576,6 +1751,25 @@
 
       (bars ? '<h3 class="section-title">Per categorie</h3><div class="bars">' + bars + '</div>' : '') +
 
+      (function () {
+        var byColor = {};
+        items.forEach(function (i) {
+          (i.colors || []).forEach(function (c) { byColor[c] = (byColor[c] || 0) + 1; });
+        });
+        var keys = Object.keys(byColor);
+        if (!keys.length) return '';
+        var top = Math.max.apply(null, keys.map(function (k) { return byColor[k]; }));
+        var rows = COLORS.filter(function (c) { return byColor[c.key]; })
+          .sort(function (a, b) { return byColor[b.key] - byColor[a.key]; })
+          .map(function (c) {
+            return '<div class="bar-row">' +
+              '<span class="bar-label"><i class="chip-swatch" style="background:' + esc(c.hex) + '"></i> ' + esc(c.label) + '</span>' +
+              '<span class="bar"><i style="width:' + Math.round(byColor[c.key] / top * 100) + '%"></i></span>' +
+              '<span class="bar-num">' + byColor[c.key] + '</span></div>';
+          }).join('');
+        return '<h3 class="section-title">Per kleur</h3><div class="bars">' + rows + '</div>';
+      })() +
+
       (mostWorn.length
         ? '<h3 class="section-title">Meest gedragen</h3><div class="list">' + mostWorn.map(function (it) {
             return '<a class="list-item" href="#/item/' + esc(it.id) + '">' + itemThumb(it, 'list-thumb') +
@@ -1585,10 +1779,32 @@
           }).join('') + '</div>'
         : '') +
 
-      '<h3 class="section-title">Back-up</h3>' +
-      '<p class="hint block">Je kast staat alleen in deze browser op dit apparaat. Maak af en toe een back-up, en zet die terug als je van telefoon wisselt.</p>' +
-      '<button class="btn btn-secondary btn-block" data-act="export">Back-up downloaden</button>' +
-      '<button class="btn btn-secondary btn-block" data-act="import">Back-up terugzetten</button>' +
+      '<h3 class="section-title">Weergave</h3>' +
+      '<div class="setting-row"><span>Thema</span>' +
+        '<div class="seg">' + [
+          { key: 'systeem', label: 'Systeem' },
+          { key: 'licht', label: 'Licht' },
+          { key: 'donker', label: 'Donker' }
+        ].map(function (t) {
+          return '<button type="button" class="seg-btn' + (currentTheme() === t.key ? ' active' : '') + '" ' +
+            'data-act="set-theme" data-val="' + t.key + '">' + t.label + '</button>';
+        }).join('') + '</div>' +
+      '</div>' +
+
+      '<h3 class="section-title">Keuzes delen zonder bestand</h3>' +
+      '<p class="hint block">Cijfers, doneerkeuzes en outfits passen als tekstcode in een berichtje. ' +
+        'Handig om heen en weer te sturen zonder iets te downloaden.</p>' +
+      '<button class="btn btn-secondary btn-block" data-act="share-choices">📋 Keuzes kopiëren als code</button>' +
+      '<button class="btn btn-secondary btn-block" data-act="paste-choices">📥 Keuzes plakken</button>' +
+
+      '<h3 class="section-title">Volledige back-up</h3>' +
+      '<p class="hint block">Met foto\'s erbij, dus te groot voor een code. Je kast staat alleen in deze ' +
+        'browser op dit apparaat — maak af en toe een back-up.</p>' +
+      (navigator.share
+        ? '<button class="btn btn-secondary btn-block" data-act="share-backup">📤 Back-up delen</button>'
+        : '') +
+      '<button class="btn btn-secondary btn-block" data-act="export">⬇︎ Back-up downloaden</button>' +
+      '<button class="btn btn-secondary btn-block" data-act="import">⬆︎ Back-up terugzetten</button>' +
 
       '<h3 class="section-title">Opruimen</h3>' +
       '<button class="btn btn-danger btn-block" data-act="wipe">Alles verwijderen</button>' +
@@ -1601,8 +1817,7 @@
     return '<div class="stat"><span class="stat-num">' + num + '</span><span class="stat-label">' + esc(label) + '</span></div>';
   }
 
-  async function exportBackup() {
-    toast('Back-up voorbereiden…');
+  async function buildBackupBlob() {
     var images = await KastDB.getAll(KastDB.IMAGES);
     var out = [];
     for (var i = 0; i < images.length; i++) {
@@ -1616,16 +1831,104 @@
       app: 'kledingkast', version: 2, exportedAt: new Date().toISOString(),
       items: state.items, outfits: state.outfits, folders: state.folders, images: out
     };
-    var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    return new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  }
+
+  function downloadBlob(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'kledingkast-backup-' + todayISO() + '.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  async function exportBackup() {
+    toast('Back-up voorbereiden…');
+    var blob = await buildBackupBlob();
+    downloadBlob(blob, 'kledingkast-backup-' + todayISO() + '.json');
     toast('Back-up gedownload');
+  }
+
+  /* Via het deelmenu van de telefoon: rechtstreeks naar WhatsApp of AirDrop,
+     zonder eerst iets in Bestanden te parkeren. */
+  async function shareBackup() {
+    toast('Back-up voorbereiden…');
+    var blob = await buildBackupBlob();
+    var name = 'kledingkast-backup-' + todayISO() + '.json';
+    if (typeof File === 'function' && navigator.canShare) {
+      var file = new File([blob], name, { type: 'application/json' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Mijn Kledingkast' });
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+        }
+      }
+    }
+    downloadBlob(blob, name);
+    toast('Delen kan hier niet — back-up gedownload');
+  }
+
+  /* ─────────────────────── Deelcode (zonder bestand) ─────────────────────
+     Alles wat Askim toevoegt — cijfers, doneerkeuzes en haar outfits — is
+     platte tekst zonder foto's, en past dus in een berichtje. */
+
+  function bytesToBase64(bytes) {
+    var bin = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+
+  function base64ToBytes(b64) {
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function packCode(text) {
+    if (typeof CompressionStream === 'function') {
+      var stream = new Blob([new TextEncoder().encode(text)]).stream()
+        .pipeThrough(new CompressionStream('gzip'));
+      var buf = await new Response(stream).arrayBuffer();
+      return 'KAST1Z' + bytesToBase64(new Uint8Array(buf));
+    }
+    return 'KAST1R' + bytesToBase64(new TextEncoder().encode(text));
+  }
+
+  async function unpackCode(code) {
+    var clean = String(code).replace(/\s+/g, '');
+    var m = /^KAST1([ZR])(.+)$/.exec(clean);
+    if (!m) throw new Error('geen geldige code');
+    var bytes = base64ToBytes(m[2]);
+    if (m[1] === 'R') return new TextDecoder().decode(bytes);
+    if (typeof DecompressionStream !== 'function') throw new Error('inpakken niet ondersteund');
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).text();
+  }
+
+  function choicePayload() {
+    return {
+      app: 'kledingkast', kind: 'keuzes', version: 2,
+      items: state.items
+        .filter(function (i) { return i.rating != null || i.donate; })
+        .map(function (i) { return { id: i.id, rating: i.rating, donate: !!i.donate }; }),
+      outfits: state.outfits
+        .filter(function (o) { return o.author === 'askim' || o.rating != null; })
+        .map(function (o) {
+          return {
+            id: o.id, name: o.name, itemIds: o.itemIds, occasion: o.occasion,
+            seasons: o.seasons, notes: o.notes, author: o.author, rating: o.rating,
+            createdAt: o.createdAt, updatedAt: o.updatedAt
+          };
+        })
+    };
   }
 
   async function importBackup(file) {
@@ -1713,6 +2016,9 @@
       o.itemIds = (o.itemIds || []).filter(function (id) { return !!getItem(id); });
       o.seasons = o.seasons || [];
       o.wearCount = o.wearCount || 0;
+      o.lastWorn = o.lastWorn || null;
+      o.favorite = !!o.favorite;
+      o.occasion = o.occasion || 'dagelijks';
       if (o.rating === undefined) o.rating = null;
       await saveOutfit(o);
       outfitsAdded++;
@@ -1834,6 +2140,35 @@
     'outfit-sort': function (btn) {
       state.outfitSort = btn.getAttribute('data-val');
       render();
+    },
+    'outfit-occasion': function (btn) {
+      state.outfitFilter.occasion = btn.getAttribute('data-val');
+      render();
+    },
+    'outfit-author': function (btn) {
+      var val = btn.getAttribute('data-val');
+      state.outfitFilter.author = state.outfitFilter.author === val ? '' : val;
+      render();
+    },
+    'outfit-filter-reset': function () {
+      state.outfitFilter = { q: '', occasion: '', author: '' };
+      state.outfitSort = 'recent';
+      render();
+    },
+    'duplicate-outfit': async function (btn) {
+      var o = getOutfit(btn.getAttribute('data-id'));
+      if (!o) return;
+      var kopie = JSON.parse(JSON.stringify(o));
+      kopie.id = uid('out');
+      kopie.name = (o.name || 'Naamloze outfit') + ' (kopie)';
+      // Een kopie begint met een schone lei: nog niet gedragen, nog geen cijfer.
+      kopie.wearCount = 0;
+      kopie.lastWorn = null;
+      kopie.rating = null;
+      kopie.createdAt = Date.now();
+      await saveOutfit(kopie);
+      toast('Kopie gemaakt');
+      go('#/outfit/' + kopie.id + '/edit');
     },
     'skip-askim': function (btn) {
       state.askimSkipped.push(btn.getAttribute('data-id'));
@@ -2022,7 +2357,57 @@
     },
 
     'export': function () { exportBackup(); },
+    'share-backup': function () { shareBackup(); },
     'import': function () { els.fileImport.click(); },
+    'share-choices': function () { openShareCode(); },
+    'paste-choices': function () { openPasteCode(); },
+    'copy-code': async function () {
+      var ta = document.getElementById('shareCode');
+      if (!ta) return;
+      try {
+        await navigator.clipboard.writeText(ta.value);
+        toast('Code gekopieerd');
+      } catch (err) {
+        // Oudere browsers (en Safari zonder toestemming) via de selectie.
+        ta.removeAttribute('readonly');
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+        ta.setAttribute('readonly', 'readonly');
+        toast(ok ? 'Code gekopieerd' : 'Selecteer de code en kopieer hem zelf');
+      }
+    },
+    'share-code': async function () {
+      var ta = document.getElementById('shareCode');
+      if (!ta || !navigator.share) return;
+      try { await navigator.share({ title: 'Kledingkast — keuzes', text: ta.value }); }
+      catch (err) { /* geannuleerd */ }
+    },
+    'apply-code': async function () {
+      var ta = document.getElementById('pasteCode');
+      if (!ta || !ta.value.trim()) { toast('Plak eerst een code'); return; }
+      var data;
+      try {
+        data = JSON.parse(await unpackCode(ta.value));
+      } catch (err) {
+        toast('Deze code kan ik niet lezen');
+        return;
+      }
+      if (!data || data.app !== 'kledingkast' || !Array.isArray(data.items)) {
+        toast('Dit is geen kledingkast-code');
+        return;
+      }
+      closeOverlay();
+      toast('Keuzes overnemen…');
+      var res = await mergeAskim(data);
+      render();
+      toast(res.ratings + ' cijfers en ' + plural(res.outfits, 'outfit', 'outfits') + ' overgenomen');
+    },
+    'set-theme': function (btn) {
+      setTheme(btn.getAttribute('data-val'));
+      render();
+    },
     'wipe': async function () {
       var ok = await confirmDialog({
         title: 'Alles verwijderen?',
@@ -2073,7 +2458,23 @@
     if (ev.target.id === 'search') {
       state.filters.q = ev.target.value;
       refreshGrid();
+    } else if (ev.target.id === 'outfitSearch') {
+      state.outfitFilter.q = ev.target.value;
+      refreshOutfitList();
     }
+  }
+
+  /* Escape sluit wat er open staat — op een pc verwacht je dat. */
+  function onKeydown(ev) {
+    if (ev.key !== 'Escape' || els.overlay.hidden) return;
+    var dialog = els.overlay.querySelector('[data-dlg]');
+    if (dialog) {
+      // Een dialoog wacht op een antwoord; die moet zelf afronden.
+      els.overlay.click();
+      return;
+    }
+    closeOverlay();
+    render();
   }
 
   async function onPhotoChosen(ev) {
@@ -2161,8 +2562,10 @@
     els.fileBulk = document.getElementById('fileBulk');
     els.fileImport = document.getElementById('fileImport');
 
+    applyTheme(currentTheme());
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
+    document.addEventListener('keydown', onKeydown);
     els.filePhoto.addEventListener('change', onPhotoChosen);
     els.fileBulk.addEventListener('change', onBulkChosen);
     els.fileImport.addEventListener('change', onImportChosen);

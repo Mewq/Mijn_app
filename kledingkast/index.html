@@ -14,6 +14,14 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
+<script>
+  /* Vóór het tekenen zetten, anders flitst het verkeerde thema even door. */
+  try {
+    var t = localStorage.getItem('kledingkast-thema');
+    if (t === 'licht') document.documentElement.setAttribute('data-theme', 'light');
+    else if (t === 'donker') document.documentElement.setAttribute('data-theme', 'dark');
+  } catch (e) { /* privémodus: dan gewoon het systeemthema */ }
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
