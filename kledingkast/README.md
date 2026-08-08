@@ -164,6 +164,24 @@ dan is de kast weg.
 Onder **Meer → Back-up** download je één JSON-bestand met alles erin, foto's
 inbegrepen. Maak die back-up af en toe.
 
+## Beweging
+
+Schermwissels laten zien waar je heen gaat: dieper de app in (van de kast naar
+een kledingstuk, van een kledingstuk naar het bewerkscherm) komt van rechts,
+terugkomen van links, en tussen tabbladen komt het scherm gewoon op. Tegels en
+lijstrijen verschijnen kort na elkaar in plaats van als één blok.
+
+Twee dingen om te weten als je hieraan sleutelt:
+
+- De overgang speelt alleen bij een echte routewissel, en de klasse wordt daarna
+  weer weggehaald. Zonder dat zou het raster opnieuw komen opzetten bij elke
+  toetsaanslag in het zoekveld, want dat vervangt de tegels.
+- De opkomst verschuift tegels een stukje naar beneden. Daardoor viel de onderste
+  tegel net buiten de voorlaadmarge van het lui laden van foto's; die marge staat
+  daarom op 900 px.
+
+Alles hierboven verdwijnt zodra het systeem om minder beweging vraagt.
+
 ## Op de telefoon en op de pc
 
 Dezelfde HTML, twee indelingen. Op een smal scherm staat de navigatie onderaan
