@@ -302,10 +302,38 @@
     return dl * dl + da * da + db * db;
   }
 
-  /* Levert één of twee kleuren uit het palet, of 'print' als er niets
-     duidelijk overheerst. */
+  /* Kleuren die je zelf aantikt: metallic haal je niet uit een foto, want
+     zilver en goud lijken op elke grijstint en elke gele tint. */
+  var AUTO_SKIP = { zilver: 1, goud: 1, print: 1 };
+  var NEUTRAAL = [
+    { key: 'zwart', L: 10 },
+    { key: 'grijs', L: 63 },
+    { key: 'wit', L: 96 }
+  ];
+
+  function chromaOf(lab) {
+    return Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2]);
+  }
+
+  function mediaan(arr) {
+    if (!arr.length) return 0;
+    var kopie = arr.slice().sort(function (a, b) { return a - b; });
+    return kopie[Math.floor(kopie.length / 2)];
+  }
+
+  /* Levert één kleur uit het palet, of 'print' als er niets overheerst.
+
+     Waarom niet simpelweg elke pixel bij de dichtstbijzijnde paletkleur
+     zoeken: grijs en zilver liggen in het midden van het kleurvlak en zijn
+     daardoor de buur van elke schaduw, plooi en muur. Op een echte foto
+     winnen ze dan altijd. Vandaar drie stappen:
+       1. de achtergrond eruit, geschat uit de rand van de foto;
+       2. is het overgrote deel ontzadigd, dan is het een neutraal stuk en
+          beslist alleen de helderheid tussen zwart, grijs en wit;
+       3. anders tellen alleen de kleurige pixels mee, gewogen naar hoe
+          verzadigd ze zijn, zodat schaduw de tint niet meesleept. */
   function detectColors(bmp) {
-    var W = 56, H = 72;
+    var W = 64, H = 80;
     var canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -313,38 +341,90 @@
     ctx.drawImage(bmp, 0, 0, W, H);
     var data = ctx.getImageData(0, 0, W, H).data;
 
-    var pal = paletteLab();
-    var score = {};
-    var totaal = 0;
-
-    for (var y = 0; y < H; y++) {
-      for (var x = 0; x < W; x++) {
-        // Het kledingstuk ligt meestal in het midden; de randen zijn vaker
-        // vloer, muur of hanger. Vandaar dat het midden zwaarder telt.
-        var dx = (x + 0.5) / W - 0.5;
-        var dy = (y + 0.5) / H - 0.5;
-        var gewicht = (Math.abs(dx) < 0.3 && Math.abs(dy) < 0.35) ? 3 : 1;
-
-        var i = (y * W + x) * 4;
-        var lab = srgbToLab(data[i], data[i + 1], data[i + 2]);
-        var best = null, bestD = Infinity;
-        for (var p = 0; p < pal.length; p++) {
-          var d = labDist2(lab, pal[p].lab);
-          if (d < bestD) { bestD = d; best = pal[p].key; }
-        }
-        score[best] = (score[best] || 0) + gewicht;
-        totaal += gewicht;
-      }
+    var lab = [];
+    for (var i = 0; i < W * H; i++) {
+      lab.push(srgbToLab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
     }
 
-    var gesorteerd = Object.keys(score).sort(function (a, b) { return score[b] - score[a]; });
-    if (!gesorteerd.length) return [];
-    var aandeel = score[gesorteerd[0]] / totaal;
-    if (aandeel < 0.34) return ['print'];
+    // 1. Achtergrond schatten uit de randstrook.
+    var randL = [], randA = [], randB = [];
+    var mx = Math.round(W * 0.1), my = Math.round(H * 0.08);
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        if (x >= mx && x < W - mx && y >= my && y < H - my) continue;
+        var q = lab[y * W + x];
+        randL.push(q[0]); randA.push(q[1]); randB.push(q[2]);
+      }
+    }
+    var bg = [mediaan(randL), mediaan(randA), mediaan(randB)];
 
-    var uit = [gesorteerd[0]];
-    if (gesorteerd[1] && score[gesorteerd[1]] / totaal > 0.22) uit.push(gesorteerd[1]);
-    return uit;
+    var kept = [];
+    var binnen = [];
+    for (var yy = my; yy < H - my; yy++) {
+      for (var xx = mx; xx < W - mx; xx++) {
+        var px = lab[yy * W + xx];
+        binnen.push(px);
+        if (labDist2(px, bg) > 18 * 18) kept.push(px);
+      }
+    }
+    // Vult het kledingstuk het hele beeld, dan lijkt alles op de "achtergrond";
+    // dan is het beter om gewoon alles te gebruiken.
+    if (kept.length < binnen.length * 0.12) kept = binnen;
+    if (!kept.length) return [];
+
+    // 2. Neutraal of kleurig?
+    var neutraleL = [];
+    var kleurig = [];
+    for (var k = 0; k < kept.length; k++) {
+      if (chromaOf(kept[k]) < 10) neutraleL.push(kept[k][0]);
+      else kleurig.push(kept[k]);
+    }
+    if (neutraleL.length > kept.length * 0.6 || !kleurig.length) {
+      var m = mediaan(neutraleL);
+      var beste = NEUTRAAL[0];
+      NEUTRAAL.forEach(function (n) {
+        if (Math.abs(n.L - m) < Math.abs(beste.L - m)) beste = n;
+      });
+      return [beste.key];
+    }
+
+    // 3. Alleen de kleurige pixels, gewogen naar verzadiging.
+    var pal = paletteLab().filter(function (c) { return !AUTO_SKIP[c.key]; });
+    var chroom = pal.filter(function (c) {
+      return NEUTRAAL.every(function (n) { return n.key !== c.key; });
+    });
+
+    var score = {};
+    var totaal = 0;
+    var sl = 0, sa = 0, sb = 0;
+    for (var c2 = 0; c2 < kleurig.length; c2++) {
+      var p = kleurig[c2];
+      var w = Math.min(chromaOf(p), 60);
+      var best = null, bestD = Infinity;
+      for (var j = 0; j < chroom.length; j++) {
+        var d = labDist2(p, chroom[j].lab);
+        if (d < bestD) { bestD = d; best = chroom[j].key; }
+      }
+      score[best] = (score[best] || 0) + w;
+      totaal += w;
+      sl += p[0] * w; sa += p[1] * w; sb += p[2] * w;
+    }
+    if (!totaal) return [];
+
+    var gesorteerd = Object.keys(score).sort(function (a, b) { return score[b] - score[a]; });
+    var top = score[gesorteerd[0]] / totaal;
+    var verspreid = gesorteerd.filter(function (k) { return score[k] / totaal > 0.12; }).length;
+    if (top < 0.45 && verspreid >= 3) return ['print'];
+
+    // Het gemiddelde van de kleurige pixels is de tint van het stuk zelf;
+    // schaduwplekken wegen licht mee en trekken hem niet naar bruin.
+    var gem = [sl / totaal, sa / totaal, sb / totaal];
+    var kies = chroom[0], kiesD = Infinity;
+    for (var g = 0; g < chroom.length; g++) {
+      var dd = labDist2(gem, chroom[g].lab);
+      if (dd < kiesD) { kiesD = dd; kies = chroom[g]; }
+    }
+    return [kies.key];
   }
 
   function colorLabel(key) {

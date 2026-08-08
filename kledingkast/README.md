@@ -35,9 +35,10 @@ internet.
   dan een apart kledingstuk dat je later een naam geeft. Die krijgen het label
   "nog invullen" zolang de naam leeg is.
 - **Kleur wordt uit de foto herkend.** Voeg je een foto toe en heb je nog geen
-  kleur aangetikt, dan vult de app die zelf in. Een eigen keuze wordt nooit
+  kleur aangetikt, dan vult de app er één in. Een eigen keuze wordt nooit
   overschreven, en met "🎨 Kleur uit de foto halen" doe je het alsnog of opnieuw.
-  Is er geen kleur die overheerst, dan wordt het "Print".
+  Is er geen kleur die overheerst, dan wordt het "Print". Zilver en goud stelt de
+  app nooit voor — die kies je zelf.
 - **Labels** in je eigen woorden — "comfy", "te klein", "cadeau van mama".
   Eerder gebruikte labels worden voorgesteld, en je kunt erop filteren en zoeken.
 - Zoeken op naam, merk, kleur, label of categorie, en filteren op categorie,
@@ -196,11 +197,25 @@ Een kledingstuk bewaart zijn foto's als `imageIds` met daarnaast een
 `coverImageId` voor de hoofdfoto. Back-ups uit een eerdere versie hadden één
 `imageId`; die worden bij het inladen automatisch omgezet.
 
-Kleurherkenning gebeurt lokaal op een canvas van 56×72 pixels. Elke pixel gaat
-van sRGB naar Lab voordat hij bij het palet wordt gezocht: in RGB liggen zwart
-en donkergrijs dicht bij elkaar terwijl ze er duidelijk anders uitzien. Het
-midden van de foto telt drie keer zo zwaar, want daar hangt het kledingstuk en
-niet de vloer of de muur. Overheerst geen enkele kleur, dan wordt het "Print".
+Kleurherkenning gebeurt lokaal op een canvas van 64×80 pixels, in Lab-ruimte:
+in RGB liggen zwart en donkergrijs dicht bij elkaar terwijl ze er duidelijk
+anders uitzien.
+
+Elke pixel bij de dichtstbijzijnde paletkleur zoeken werkt níét, en dat is de
+moeite waard om te onthouden. Grijs en zilver liggen midden in het kleurvlak en
+zijn daardoor de buur van elke schaduw, plooi en muur; op een echte foto winnen
+ze dan altijd. Vandaar drie stappen:
+
+1. De achtergrond eruit, geschat als de mediaan van de randstrook. Vult het
+   kledingstuk het hele beeld, dan valt die stap weg.
+2. Is meer dan 60% van wat overblijft ontzadigd, dan is het een neutraal stuk en
+   beslist alleen de helderheid tussen zwart, grijs en wit.
+3. Anders tellen alleen de kleurige pixels mee, gewogen naar hoe verzadigd ze
+   zijn. De tint komt uit hun gewogen gemiddelde, zodat een donkere plooi rood
+   niet naar bruin trekt. Is de verdeling te breed, dan wordt het "Print".
+
+Test dit met fotoachtige beelden, niet met vlakke kleurvlakken: die laatste zijn
+te makkelijk en lieten precies deze fout door.
 
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`
