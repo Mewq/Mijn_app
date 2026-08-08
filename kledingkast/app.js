@@ -190,6 +190,12 @@
 
   function go(hash) { location.hash = hash; }
 
+  function stopOvergang() {
+    if (!els.view) return;
+    clearTimeout(enterTimer);
+    els.view.classList.remove('enter-in', 'enter-vooruit', 'enter-terug');
+  }
+
   /* ──────────────────────────────── Thema ────────────────────────────────
      'systeem' volgt de telefoon; 'licht' en 'donker' overrulen dat. */
 
@@ -488,7 +494,9 @@
           obs.unobserve(e.target);
           loadImgEl(e.target);
         });
-      }, { root: scroller || null, rootMargin: '600px 0px' }));
+        // Ruim genomen: de opkomstanimatie verschuift tegels een stukje naar
+        // beneden, en met een krappe marge viel de onderste er net buiten.
+      }, { root: scroller || null, rootMargin: '900px 0px' }));
     }
     return observers.get(key);
   }
@@ -960,6 +968,32 @@
   }
 
   var lastRoute = null;
+  var lastDepth = null;
+  var enterTimer = null;
+
+  /* Hoe diep zit een scherm? Daarmee weet de overgang of je verder de app in
+     gaat (van rechts) of terugkomt (van links). */
+  function routeDepth(parts) {
+    var p0 = parts[0];
+    if (p0 === 'item' || p0 === 'outfit' || p0 === 'map') {
+      var nieuw = String(parts[1]).indexOf('new') === 0;
+      return (nieuw || parts[2] === 'edit') ? 2 : 1;
+    }
+    if (p0 === 'doneren') return 1;
+    return 0;
+  }
+
+  /* De klasse blijft maar kort staan: anders zou elk raster dat tijdens het
+     typen ververst wordt opnieuw komen opzetten. */
+  function speelOvergang(richting) {
+    clearTimeout(enterTimer);
+    els.view.classList.remove('enter-in', 'enter-vooruit', 'enter-terug');
+    void els.view.offsetWidth;
+    els.view.classList.add('enter-' + richting);
+    enterTimer = setTimeout(function () {
+      els.view.classList.remove('enter-in', 'enter-vooruit', 'enter-terug');
+    }, 700);
+  }
 
   function render() {
     if (!state.ready) return;
@@ -1024,10 +1058,13 @@
     // op een filterchip, want dan knippert het hele scherm mee.
     var here = parts.join('/');
     if (here !== lastRoute) {
+      var diepte = routeDepth(parts);
+      var richting = 'in';
+      if (lastDepth !== null && diepte > lastDepth) richting = 'vooruit';
+      else if (lastDepth !== null && diepte < lastDepth) richting = 'terug';
       lastRoute = here;
-      els.view.classList.remove('is-entering');
-      void els.view.offsetWidth;
-      els.view.classList.add('is-entering');
+      lastDepth = diepte;
+      speelOvergang(richting);
     }
 
     hydrateImages(els.view);
@@ -1261,6 +1298,7 @@
   function refreshGrid() {
     var grid = document.getElementById('grid');
     if (!grid) return;
+    stopOvergang();
     grid.innerHTML = gridHtml();
     hydrateImages(grid);
   }
@@ -1620,6 +1658,7 @@
   function refreshOutfitList() {
     var el = document.getElementById('outfitList');
     if (!el) return;
+    stopOvergang();
     el.innerHTML = outfitListHtml();
     hydrateImages(el);
   }
