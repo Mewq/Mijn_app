@@ -190,6 +190,50 @@
 
   function go(hash) { location.hash = hash; }
 
+  function prefersReduced() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  function wacht(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+
+  /* Statistieken tellen op vanaf nul. data-target houdt het eindgetal vast,
+     zodat er altijd een bron van waarheid is terwijl het loopt. */
+  function telOp(el) {
+    var doel = Number(el.getAttribute('data-target'));
+    if (!isFinite(doel) || doel <= 0 || prefersReduced()) {
+      el.textContent = isFinite(doel) ? doel : el.textContent;
+      return;
+    }
+    var start = null;
+    var duur = 520;
+    el.textContent = '0';
+    requestAnimationFrame(function stap(nu) {
+      if (start === null) start = nu;
+      var p = Math.min(1, (nu - start) / duur);
+      el.textContent = Math.round(doel * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(stap);
+      else el.textContent = doel;
+    });
+  }
+
+  /* De beoordeelkaart schuift weg voordat de volgende binnenkomt. Alleen in
+     de sectie Askim; op een detailscherm zou dat nergens op slaan. */
+  async function askimKaartWissel(doeHet) {
+    var opAskim = parseRoute()[0] === 'askim';
+    var kaart = opAskim ? document.querySelector('.askim-card') : null;
+    if (kaart && !prefersReduced()) {
+      kaart.classList.add('weg');
+      await wacht(230);
+    }
+    await doeHet();
+    render();
+    if (!opAskim || prefersReduced()) return;
+    var nieuw = document.querySelector('.askim-card');
+    if (nieuw) nieuw.classList.add('nieuw');
+  }
+
   function stopOvergang() {
     if (!els.view) return;
     clearTimeout(enterTimer);
@@ -969,6 +1013,7 @@
 
   var lastRoute = null;
   var lastDepth = null;
+  var lastTab = null;
   var enterTimer = null;
 
   /* Hoe diep zit een scherm? Daarmee weet de overgang of je verder de app in
@@ -1052,7 +1097,8 @@
     els.topbar.innerHTML = top;
     els.view.innerHTML = view;
     els.view.setAttribute('data-route', parts[0]);
-    els.tabbar.innerHTML = tabBar(rootTab(parts));
+    var tabNu = rootTab(parts);
+    els.tabbar.innerHTML = tabBar(tabNu);
 
     // Alleen bij een echte schermwissel laten opkomen — niet bij elk tikje
     // op een filterchip, want dan knippert het hele scherm mee.
@@ -1065,6 +1111,16 @@
       lastRoute = here;
       lastDepth = diepte;
       speelOvergang(richting);
+
+      // Het tabicoon wipt alleen als je echt van tabblad wisselt.
+      if (tabNu !== lastTab) {
+        lastTab = tabNu;
+        var icoon = els.tabbar.querySelector('.tab.active .tab-icon');
+        if (icoon) icoon.classList.add('pop');
+      }
+      if (parts[0] === 'meer') {
+        Array.prototype.forEach.call(els.view.querySelectorAll('.stat-num[data-target]'), telOp);
+      }
     }
 
     hydrateImages(els.view);
@@ -1878,6 +1934,8 @@
     syncOutfitDraftFromDom();
     state.draft.data.itemIds = picked;
     render();
+    var strip = document.querySelector('.sel-strip');
+    if (strip && !prefersReduced()) strip.classList.add('verrast');
   }
 
   /* ─────────────────────────────────  Mappen ─────────────────────────────── */
@@ -2431,7 +2489,8 @@
   }
 
   function stat(num, label) {
-    return '<div class="stat"><span class="stat-num">' + num + '</span><span class="stat-label">' + esc(label) + '</span></div>';
+    return '<div class="stat"><span class="stat-num" data-target="' + num + '">' + num + '</span>' +
+      '<span class="stat-label">' + esc(label) + '</span></div>';
   }
 
   async function buildBackupBlob() {
@@ -2797,18 +2856,22 @@
       var it = getItem(btn.getAttribute('data-id'));
       if (!it) return;
       var val = btn.getAttribute('data-val');
-      it.rating = val === '' ? null : Number(val);
-      await saveItem(it);
-      render();
+      await askimKaartWissel(async function () {
+        it.rating = val === '' ? null : Number(val);
+        await saveItem(it);
+      });
+      klopKnop(val);
       if (it.rating) toast('Cijfer ' + it.rating + ' opgeslagen');
     },
     'rate-outfit': async function (btn) {
       var o = getOutfit(btn.getAttribute('data-id'));
       if (!o) return;
       var val = btn.getAttribute('data-val');
-      o.rating = val === '' ? null : Number(val);
-      await saveOutfit(o);
-      render();
+      await askimKaartWissel(async function () {
+        o.rating = val === '' ? null : Number(val);
+        await saveOutfit(o);
+      });
+      klopKnop(val);
       if (o.rating) toast('Cijfer ' + o.rating + ' opgeslagen');
     },
     'askim-mode': function (btn) {
@@ -2849,17 +2912,18 @@
       go('#/outfit/' + kopie.id + '/edit');
     },
     'skip-askim': function (btn) {
-      state.askimSkipped.push(btn.getAttribute('data-id'));
-      render();
+      var id = btn.getAttribute('data-id');
+      askimKaartWissel(function () { state.askimSkipped.push(id); });
     },
     'askim-unskip': function () { state.askimSkipped = []; render(); },
     'donate-item': async function (btn) {
       var it = getItem(btn.getAttribute('data-id'));
       if (!it) return;
-      it.donate = true;
-      it.laundry = false;   // weggeven gaat voor wassen
-      await saveItem(it);
-      render();
+      await askimKaartWissel(async function () {
+        it.donate = true;
+        it.laundry = false;   // weggeven gaat voor wassen
+        await saveItem(it);
+      });
       toast('Op de doneerstapel gelegd');
     },
     'undonate-item': async function (btn) {
@@ -2918,11 +2982,14 @@
       Array.prototype.forEach.call(document.querySelectorAll('.gallery-thumb'), function (t) {
         t.classList.toggle('is-active', t === btn);
       });
+      main.classList.remove('loaded');   // vervaagt door de bestaande transitie
       imageUrl(imgId, 'full').then(function (url) {
         if (!url) return;
         main.src = url;
-        main.classList.add('loaded');
-        if (main.parentNode) main.parentNode.classList.add('has-photo');
+        requestAnimationFrame(function () {
+          main.classList.add('loaded');
+          if (main.parentNode) main.parentNode.classList.add('has-photo');
+        });
       });
     },
 
@@ -3207,6 +3274,14 @@
       toast('Alles gewist');
     }
   };
+
+  /* Kort zetje op de zojuist gekozen cijferknop. Het scherm is opnieuw
+     getekend, dus we zoeken hem terug in plaats van de oude knop te gebruiken. */
+  function klopKnop(val) {
+    if (val === '' || prefersReduced()) return;
+    var knop = document.querySelector('.rate-btn.active');
+    if (knop) knop.classList.add('pop');
+  }
 
   function selectSingle(btn) {
     var parent = btn.parentNode;

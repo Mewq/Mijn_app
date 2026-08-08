@@ -171,6 +171,18 @@ een kledingstuk, van een kledingstuk naar het bewerkscherm) komt van rechts,
 terugkomen van links, en tussen tabbladen komt het scherm gewoon op. Tegels en
 lijstrijen verschijnen kort na elkaar in plaats van als één blok.
 
+Verder beweegt:
+
+- De **foto op een detailscherm** komt met een zoom naar voren.
+- De **beoordeelkaart** in de sectie Askim schuift naar links weg zodra je een
+  cijfer geeft, overslaat of doneert; de volgende komt van rechts binnen.
+- De **cijferknop** die je kiest krijgt een zetje, en het **tabicoon** wipt als
+  je van tabblad wisselt — niet als je binnen hetzelfde tabblad blijft.
+- De **statistieken** tellen op vanaf nul en de staafjes groeien vanaf links.
+  Het eindgetal staat in `data-target`, zodat er tijdens het tellen altijd een
+  bron van waarheid is.
+- "🎲 Verras me" laat de gekozen stukken één voor één binnenvallen.
+
 Twee dingen om te weten als je hieraan sleutelt:
 
 - De overgang speelt alleen bij een echte routewissel, en de klasse wordt daarna
