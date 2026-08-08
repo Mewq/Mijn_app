@@ -1227,6 +1227,8 @@ input, textarea, select { font: inherit; }
   .page, .form { padding: 20px 24px; max-width: 760px; }
   .list-cards { padding: 20px 24px; display: grid; grid-template-columns: repeat(2, 1fr); align-items: start; }
   .list-cards.flush { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .day-list { display: grid; grid-template-columns: repeat(2, 1fr); padding: 14px 24px 0; }
+  .week-nav { padding: 18px 24px 0; max-width: 420px; }
   .segment, .sort-chips { margin-inline: 24px; max-width: 420px; }
   .sort-chips { padding-inline: 0; }
 
@@ -1255,6 +1257,137 @@ input, textarea, select { font: inherit; }
   .grid { grid-template-columns: repeat(5, 1fr); }
 }
 
+/* ────────────────────────────── Agenda ─────────────────────────────────── */
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 14px 4px;
+}
+
+.week-label {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: -.01em;
+}
+
+.day-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px 0; }
+
+.day-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 12px 8px 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+
+.day-row.today { border-color: var(--accent); }
+.day-row.worn .list-sub { color: var(--accent); font-weight: 600; }
+
+.day-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  flex: none;
+  line-height: 1.1;
+}
+
+.day-date b {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.day-date i {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-row.today .day-date i, .day-row.today .day-date b { color: var(--accent); }
+.collage.day-thumb { width: 42px; height: 52px; flex: none; aspect-ratio: auto; }
+.collage.day-thumb .ph-fallback { font-size: 14px; }
+
+.day-empty {
+  width: 42px;
+  height: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-faint);
+  font-size: 20px;
+}
+
+.page.pt0 { padding-top: 4px; }
+
+/* ─────────────────────────────── Paklijst ──────────────────────────────── */
+
+.pack-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 12px 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.pack-row.on { border-color: var(--accent); background: var(--accent-soft); }
+.pack-row.on .list-text b { text-decoration: line-through; color: var(--ink-soft); }
+
+.pack-box {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line);
+  border-radius: 7px;
+  font-size: 14px;
+  color: var(--on-accent);
+}
+
+.pack-row.on .pack-box { background: var(--accent); border-color: var(--accent); }
+
+/* ──────────────────────── Waarde van de kast ───────────────────────────── */
+
+.value-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.value-num {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  color: var(--accent);
+}
+
+.value-label { font-size: 12.5px; color: var(--ink-soft); }
+
 /* ═══════════════════════ Afwerking ═══════════════════════
    Kleine dingen die het verschil maken: een rand om elke foto, tastbare
    knoppen, en beweging die je nauwelijks opmerkt maar wel voelt. */
@@ -1273,7 +1406,8 @@ input, textarea, select { font: inherit; }
 .ph-fallback span { opacity: .55; }
 .tile-photo { box-shadow: var(--shadow); }
 
-.btn, .chip, .tile-photo, .outfit-card, .list-item, .assign-row, .rate-btn, .seg-btn, .segment-btn {
+.btn, .chip, .tile-photo, .outfit-card, .list-item, .assign-row, .rate-btn, .seg-btn,
+.segment-btn, .day-row, .pack-row {
   transition: background-color .18s ease, border-color .18s ease, color .18s ease,
               box-shadow .25s ease, transform .18s ease;
 }
@@ -1336,7 +1470,7 @@ input, textarea, select { font: inherit; }
   .tile:hover .tile-photo { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
   .outfit-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
   .tile:hover .tile-name { color: var(--accent); }
-  .list-item:hover, .assign-row:hover { border-color: var(--accent); }
+  .list-item:hover, .assign-row:hover, .day-row:hover, .pack-row:hover { border-color: var(--accent); }
   .chip:hover:not(.active) { border-color: var(--ink-faint); }
   .btn-primary:hover { filter: brightness(1.07); }
   .btn-secondary:hover { border-color: var(--ink-faint); }

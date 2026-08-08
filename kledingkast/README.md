@@ -37,6 +37,9 @@ internet.
 - Zoeken op naam, merk, kleur of categorie, en filteren op categorie, seizoen,
   kleur, favorieten of "nooit gedragen". Sorteren op nieuwste, naam, het cijfer
   van Askim of hoe vaak je iets draagt.
+- **Dupliceren** is handig voor hetzelfde stuk in een andere kleur of maat. De
+  foto's worden echt gekopieerd, niet gedeeld — verwijder je het origineel, dan
+  houdt de kopie gewoon haar eigen foto's.
 
 **Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
@@ -51,12 +54,29 @@ internet.
 - In een **map** verzamel je outfits die bij elkaar horen — bijvoorbeeld
   "Nog kopen" of "Vakantie Italië". Een outfit mag in meerdere mappen zitten.
   Verwijder je een map, dan blijven de outfits zelf gewoon bestaan.
+- Elke map heeft een **paklijst**: alle kledingstukken uit haar outfits, elk één
+  keer, om af te vinken terwijl de koffer open ligt.
 - Verwijder je een kledingstuk, dan verdwijnt het ook uit de outfits waar het in
   zat; verwijder je een outfit, dan verdwijnt die ook uit de mappen.
 
+**Agenda**
+- Onder **Outfits → Agenda** zie je per week wat je aanhad en wat je van plan
+  bent. Tik op een dag om er een outfit aan te hangen.
+- Een dag in de toekomst wordt **ingepland**; vandaag of eerder telt meteen als
+  **gedragen**, inclusief alle kledingstukken van die outfit.
+- Eén outfit per dag: kies je iets anders, dan schuift het vorige eruit.
+  "Dag leegmaken" maakt de dag weer vrij.
+
 **Bijhouden**
 - "Vandaag gedragen" op een kledingstuk of outfit houdt bij hoe vaak en wanneer
-  je iets draagt. Bij een outfit telt dat door naar alle stukken erin.
+  je iets draagt. Bij een outfit telt dat door naar alle stukken erin. Vergist?
+  Dezelfde knop draait het weer terug.
+- Draagbeurten worden per dag geteld. Trek je een trui los aan en noteer je
+  diezelfde dag ook de outfit waar hij in zit, dan is dat één draagbeurt — geen
+  twee.
+- Vul je bij een kledingstuk een **prijs** in, dan rekent de app de **kosten per
+  keer** uit. Onder Meer zie je de waarde van je kast en welke aankopen zich het
+  best hebben terugverdiend.
 - Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie en per
   kleur, wat je het meest draagt en wat nog nooit aan is geweest.
 - Op een kledingstuk laat **"Combineer je met"** zien wat je er in de praktijk

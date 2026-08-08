@@ -96,7 +96,8 @@
     askimSkipped: [],     // deze sessie overgeslagen in de beoordeelrij
     askimRateMode: 'items', // beoordeelt Askim nu kleding of outfits?
     outfitSort: 'recent',
-    outfitFilter: { q: '', occasion: '', author: '' }
+    outfitFilter: { q: '', occasion: '', author: '' },
+    weekOffset: 0           // 0 = deze week in de agenda
   };
 
   var els = {};
@@ -136,6 +137,43 @@
   }
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  function euro(n) {
+    if (n == null || isNaN(n)) return '';
+    return n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+  }
+
+  /* ─── Datumrekenen voor de agenda (alles in lokale tijd, geen UTC) ─── */
+
+  function isoOf(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function dateFromISO(s) {
+    var p = String(s).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+
+  function addDays(d, n) {
+    var x = new Date(d.getTime());
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+
+  /* Weken beginnen hier op maandag. */
+  function startOfWeek(d) {
+    var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return x;
+  }
+
+  function dayName(d) {
+    return d.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '');
+  }
+
+  function monthName(d) {
+    return d.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '');
+  }
 
   function toast(msg) {
     var t = els.toast;
@@ -331,6 +369,8 @@
       wearCount: 0, lastWorn: null, imageIds: [], coverImageId: null,
       rating: null,        // cijfer van Askim, 1 t/m 10
       donate: false,       // ligt op de doneerstapel
+      price: null,         // aanschafprijs in euro's
+      wearDates: [],       // op welke dagen gedragen
       createdAt: Date.now(), updatedAt: Date.now()
     };
   }
@@ -341,6 +381,8 @@
       notes: '', favorite: false, wearCount: 0, lastWorn: null,
       author: author || 'ik',   // 'ik' of 'askim'
       rating: null,             // cijfer van Askim, 1 t/m 10
+      wearDates: [],            // op welke dagen gedragen
+      plannedDates: [],         // voor welke dagen ingepland
       createdAt: Date.now(), updatedAt: Date.now()
     };
   }
@@ -370,8 +412,24 @@
     if (!i.coverImageId) i.coverImageId = i.imageIds[0] || null;
     if (i.rating === undefined) i.rating = null;
     if (i.donate === undefined) i.donate = false;
+    if (i.price === undefined) i.price = null;
+    // Oudere records kennen alleen een teller en de laatste datum. Die laatste
+    // dag nemen we mee, zodat de agenda niet bij nul begint; de teller blijft
+    // leidend voor het aantal.
+    if (!i.wearDates) i.wearDates = i.lastWorn ? [i.lastWorn] : [];
     delete i.imageId;
     return i;
+  }
+
+  function normalizeOutfit(o) {
+    o.itemIds = o.itemIds || [];
+    o.seasons = o.seasons || [];
+    o.wearCount = o.wearCount || 0;
+    o.author = o.author || 'ik';
+    if (o.rating === undefined) o.rating = null;
+    if (!o.wearDates) o.wearDates = o.lastWorn ? [o.lastWorn] : [];
+    if (!o.plannedDates) o.plannedDates = [];
+    return o;
   }
 
   function getItem(id) {
@@ -424,8 +482,10 @@
     upsert(state.items, item);
   }
 
-  async function saveOutfit(outfit) {
-    outfit.updatedAt = Date.now();
+  /* quiet=true laat updatedAt met rust, zodat bijvoorbeeld het inplannen van
+     een dag de volgorde van "Nieuwste" niet door elkaar gooit. */
+  async function saveOutfit(outfit, quiet) {
+    if (!quiet) outfit.updatedAt = Date.now();
     await KastDB.put(KastDB.OUTFITS, outfit);
     upsert(state.outfits, outfit);
   }
@@ -472,20 +532,89 @@
     state.folders = state.folders.filter(function (f) { return f.id !== id; });
   }
 
-  async function markItemWorn(item) {
+  function wornOn(entity, date) {
+    return (entity.wearDates || []).indexOf(date) !== -1;
+  }
+
+  function recalcLastWorn(entity) {
+    var dates = (entity.wearDates || []).slice().sort();
+    entity.lastWorn = dates.length ? dates[dates.length - 1] : null;
+  }
+
+  async function markItemWorn(item, date) {
+    date = date || todayISO();
+    if (wornOn(item, date)) return;
+    item.wearDates.push(date);
     item.wearCount = (item.wearCount || 0) + 1;
-    item.lastWorn = todayISO();
+    recalcLastWorn(item);
     await saveItem(item);
   }
 
-  async function markOutfitWorn(outfit) {
-    outfit.wearCount = (outfit.wearCount || 0) + 1;
-    outfit.lastWorn = todayISO();
+  async function unmarkItemWorn(item, date) {
+    date = date || todayISO();
+    if (!wornOn(item, date)) return;
+    item.wearDates = item.wearDates.filter(function (d) { return d !== date; });
+    item.wearCount = Math.max(0, (item.wearCount || 0) - 1);
+    recalcLastWorn(item);
+    await saveItem(item);
+  }
+
+  async function markOutfitWorn(outfit, date) {
+    date = date || todayISO();
+    if (!wornOn(outfit, date)) {
+      outfit.wearDates.push(date);
+      outfit.wearCount = (outfit.wearCount || 0) + 1;
+      recalcLastWorn(outfit);
+    }
+    // Wat je aanhad hoef je niet meer te plannen.
+    outfit.plannedDates = outfit.plannedDates.filter(function (d) { return d !== date; });
     await saveOutfit(outfit);
     for (var i = 0; i < outfit.itemIds.length; i++) {
       var it = getItem(outfit.itemIds[i]);
-      if (it) await markItemWorn(it);
+      if (it) await markItemWorn(it, date);
     }
+  }
+
+  async function unmarkOutfitWorn(outfit, date) {
+    date = date || todayISO();
+    if (!wornOn(outfit, date)) return;
+    outfit.wearDates = outfit.wearDates.filter(function (d) { return d !== date; });
+    outfit.wearCount = Math.max(0, (outfit.wearCount || 0) - 1);
+    recalcLastWorn(outfit);
+    await saveOutfit(outfit);
+    for (var i = 0; i < outfit.itemIds.length; i++) {
+      var it = getItem(outfit.itemIds[i]);
+      if (it) await unmarkItemWorn(it, date);
+    }
+  }
+
+  function outfitWornOn(date) {
+    for (var i = 0; i < state.outfits.length; i++) {
+      if (wornOn(state.outfits[i], date)) return state.outfits[i];
+    }
+    return null;
+  }
+
+  function outfitPlannedOn(date) {
+    for (var i = 0; i < state.outfits.length; i++) {
+      if ((state.outfits[i].plannedDates || []).indexOf(date) !== -1) return state.outfits[i];
+    }
+    return null;
+  }
+
+  /* Eén outfit per dag: de dag eerst overal loshalen. */
+  async function planOutfit(date, outfitId) {
+    for (var i = 0; i < state.outfits.length; i++) {
+      var o = state.outfits[i];
+      if ((o.plannedDates || []).indexOf(date) === -1) continue;
+      o.plannedDates = o.plannedDates.filter(function (d) { return d !== date; });
+      await saveOutfit(o, true);
+    }
+    if (!outfitId) return;
+    var pick = getOutfit(outfitId);
+    if (!pick) return;
+    pick.plannedDates.push(date);
+    await saveOutfit(pick, true);
   }
 
   /* ───────────────────────────── Filteren/sorteren ───────────────────────── */
@@ -620,7 +749,7 @@
   function rootTab(parts) {
     if (parts[0] === 'kast' || parts[0] === 'item') return 'kast';
     if (parts[0] === 'outfits' || parts[0] === 'outfit') return 'outfits';
-    if (parts[0] === 'mappen' || parts[0] === 'map') return 'outfits';
+    if (parts[0] === 'mappen' || parts[0] === 'map' || parts[0] === 'agenda') return 'outfits';
     if (parts[0] === 'askim') return 'askim';
     if (parts[0] === 'meer' || parts[0] === 'doneren') return 'meer';
     return 'kast';
@@ -661,6 +790,10 @@
       case 'mappen':
         top = topBar('Outfits', null, '<button class="icon-btn" data-act="new-folder" title="Nieuwe map">+</button>');
         view = viewFolders();
+        break;
+      case 'agenda':
+        top = topBar('Agenda');
+        view = viewAgenda();
         break;
       case 'map':
         if (parts[1] === 'new') { top = topBar('Nieuwe map', '#/mappen'); view = viewFolderForm(null); }
@@ -730,7 +863,93 @@
     return '<div class="segment">' +
       '<a class="segment-btn' + (active === 'outfits' ? ' active' : '') + '" href="#/outfits">Outfits</a>' +
       '<a class="segment-btn' + (active === 'mappen' ? ' active' : '') + '" href="#/mappen">Mappen</a>' +
+      '<a class="segment-btn' + (active === 'agenda' ? ' active' : '') + '" href="#/agenda">Agenda</a>' +
     '</div>';
+  }
+
+  /* ─────────────────────────────── Agenda ────────────────────────────────
+     Wat had je aan, en wat trek je aan? Eén outfit per dag. */
+
+  function viewAgenda() {
+    var today = todayISO();
+    var start = addDays(startOfWeek(new Date()), state.weekOffset * 7);
+    var end = addDays(start, 6);
+    var label = start.getDate() + ' ' + monthName(start) +
+      ' – ' + end.getDate() + ' ' + monthName(end);
+
+    var rows = '';
+    var gedragen = 0;
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(start, i);
+      var iso = isoOf(d);
+      var worn = outfitWornOn(iso);
+      var planned = worn ? null : outfitPlannedOn(iso);
+      var shown = worn || planned;
+      if (worn) gedragen++;
+
+      var body;
+      if (shown) {
+        var items = shown.itemIds.map(getItem).filter(Boolean);
+        body = collageHtml(items, 'collage day-thumb') +
+          '<span class="list-text"><b>' + esc(shown.name || 'Naamloze outfit') + '</b>' +
+          '<span class="list-sub">' + (worn ? 'gedragen' : 'gepland') + '</span></span>';
+      } else {
+        body = '<span class="day-empty">+</span>' +
+          '<span class="list-text"><span class="list-sub">Niets ingepland</span></span>';
+      }
+
+      rows += '<div class="day-row' + (iso === today ? ' today' : '') +
+          (worn ? ' worn' : planned ? ' planned' : '') + '" ' +
+          'data-act="plan-day" data-date="' + iso + '">' +
+        '<span class="day-date"><b>' + dayName(d) + '</b><i>' + d.getDate() + '</i></span>' +
+        body +
+        '<span class="chev">›</span></div>';
+    }
+
+    return segment('agenda') +
+      '<div class="week-nav">' +
+        '<button type="button" class="icon-btn" data-act="week-prev" aria-label="Vorige week">‹</button>' +
+        '<span class="week-label">' + esc(label) + '</span>' +
+        '<button type="button" class="icon-btn" data-act="week-next" aria-label="Volgende week">›</button>' +
+      '</div>' +
+      (state.weekOffset !== 0
+        ? '<button class="btn btn-ghost btn-block" data-act="week-today">Terug naar deze week</button>'
+        : '') +
+      '<div class="day-list">' + rows + '</div>' +
+      '<div class="page pt0">' +
+        '<p class="hint block">' + (gedragen
+          ? plural(gedragen, 'dag', 'dagen') + ' van deze week ingevuld.'
+          : 'Tik op een dag om een outfit in te plannen of achteraf te noteren.') + '</p>' +
+      '</div>';
+  }
+
+  function openPlanSheet(date) {
+    var d = dateFromISO(date);
+    var worn = outfitWornOn(date);
+    var planned = outfitPlannedOn(date);
+    var huidig = worn || planned;
+    var isPast = date < todayISO();
+
+    var body = state.outfits.length
+      ? '<div class="list sheet-list">' + sortedOutfits(state.outfits).map(function (o) {
+          var items = o.itemIds.map(getItem).filter(Boolean);
+          return '<div class="assign-row' + (huidig && huidig.id === o.id ? ' selected' : '') + '" ' +
+            'data-act="plan-pick" data-id="' + esc(o.id) + '" data-date="' + esc(date) + '">' +
+            collageHtml(items, 'collage small') +
+            '<span class="list-text"><b>' + esc(o.name || 'Naamloze outfit') + '</b>' +
+            '<span class="list-sub">' + plural(items.length, 'stuk', 'stukken') + '</span></span>' +
+            '<span class="pick-mark">✓</span></div>';
+        }).join('') + '</div>'
+      : '<p class="empty-text">Je hebt nog geen outfits om in te plannen.</p>';
+
+    showSheet(dayName(d) + ' ' + d.getDate() + ' ' + monthName(d),
+      '<p class="sheet-intro">' + (isPast
+        ? 'Kies wat je die dag aanhad — dat telt meteen als gedragen.'
+        : 'Kies wat je die dag aantrekt.') + '</p>' + body,
+      (huidig
+        ? '<button class="btn btn-secondary btn-block" data-act="plan-clear" data-date="' + esc(date) + '">Dag leegmaken</button>'
+        : '') +
+      '<button class="btn btn-ghost btn-block" data-act="picker-close">Sluiten</button>');
   }
 
   /* ───────────────────────────────── Kast ────────────────────────────────── */
@@ -839,6 +1058,10 @@
     if (it.size) rows += metaRow('Maat', it.size);
     rows += metaRow('Gedragen', (it.wearCount || 0) + ' keer' +
       (it.lastWorn ? ' · laatst ' + formatDate(it.lastWorn) : ''));
+    if (it.price != null) {
+      rows += metaRow('Prijs', euro(it.price));
+      if (it.wearCount > 0) rows += metaRow('Per keer', euro(it.price / it.wearCount));
+    }
     rows += metaRow('Cijfer van Askim', it.rating ? it.rating + ' / 10' : 'nog geen cijfer');
 
     // Meer dan één foto? Dan een strookje eronder om doorheen te bladeren.
@@ -869,7 +1092,9 @@
         (it.donate
           ? '<div class="banner">🎁 Dit stuk ligt op de doneerstapel.</div>' +
             '<button class="btn btn-secondary btn-block" data-act="undonate-item" data-id="' + esc(it.id) + '">Terug in de kast</button>'
-          : '<button class="btn btn-primary btn-block" data-act="wear-item" data-id="' + esc(it.id) + '">Vandaag gedragen</button>') +
+          : wornOn(it, todayISO())
+            ? '<button class="btn btn-secondary btn-block" data-act="unwear-item" data-id="' + esc(it.id) + '">✓ Vandaag gedragen — toch niet?</button>'
+            : '<button class="btn btn-primary btn-block" data-act="wear-item" data-id="' + esc(it.id) + '">Vandaag gedragen</button>') +
 
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(it, 'rate-item') +
@@ -884,6 +1109,7 @@
         combinesWithHtml(it) +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/item/' + esc(it.id) + '/edit">Bewerken</a>' +
+          '<button class="btn btn-secondary" data-act="duplicate-item" data-id="' + esc(it.id) + '">Dupliceren</button>' +
           '<button class="btn btn-danger" data-act="delete-item" data-id="' + esc(it.id) + '">Verwijderen</button>' +
         '</div>' +
       '</div></div>';
@@ -1006,6 +1232,9 @@
           '<input id="f-brand" class="input" type="text" value="' + esc(it.brand) + '" autocomplete="off"></div>' +
         '<div class="field"><label for="f-size">Maat</label>' +
           '<input id="f-size" class="input" type="text" value="' + esc(it.size) + '" autocomplete="off"></div>' +
+        '<div class="field"><label for="f-price">Prijs</label>' +
+          '<input id="f-price" class="input" type="text" inputmode="decimal" placeholder="\u20ac" ' +
+            'value="' + (it.price != null ? esc(it.price) : '') + '" autocomplete="off"></div>' +
       '</div>' +
 
       '<div class="field"><label for="f-notes">Notities</label>' +
@@ -1028,6 +1257,9 @@
     d.data.brand = v('f-brand').trim();
     d.data.size = v('f-size').trim();
     d.data.notes = v('f-notes').trim();
+    // Komma's zijn hier normaal; JavaScript wil een punt.
+    var prijs = parseFloat(v('f-price').replace(',', '.').replace(/[^0-9.]/g, ''));
+    d.data.price = isNaN(prijs) ? null : Math.round(prijs * 100) / 100;
     var fav = document.getElementById('f-fav');
     d.data.favorite = !!(fav && fav.checked);
   }
@@ -1196,10 +1428,16 @@
             : 'Het hele jaar door') +
           metaRow('Gedragen', (o.wearCount || 0) + ' keer' + (o.lastWorn ? ' · laatst ' + formatDate(o.lastWorn) : '')) +
           metaRow('Samengesteld door', o.author === 'askim' ? 'Askim' : 'jou') +
+          ((o.plannedDates || []).filter(function (d) { return d >= todayISO(); }).length
+            ? metaRow('Ingepland', o.plannedDates.filter(function (d) { return d >= todayISO(); })
+                .sort().map(formatDate).join(', '))
+            : '') +
           metaRow('Cijfer van Askim', o.rating ? o.rating + ' / 10' : 'nog geen cijfer') +
         '</div>' +
         (o.notes ? '<p class="notes">' + esc(o.notes) + '</p>' : '') +
-        '<button class="btn btn-primary btn-block" data-act="wear-outfit" data-id="' + esc(o.id) + '">Vandaag gedragen</button>' +
+        (wornOn(o, todayISO())
+          ? '<button class="btn btn-secondary btn-block" data-act="unwear-outfit" data-id="' + esc(o.id) + '">\u2713 Vandaag gedragen \u2014 toch niet?</button>'
+          : '<button class="btn btn-primary btn-block" data-act="wear-outfit" data-id="' + esc(o.id) + '">Vandaag gedragen</button>') +
 
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(o, 'rate-outfit') +
@@ -1365,11 +1603,37 @@
         (outfits.length
           ? '<div class="list list-cards flush">' + outfits.map(outfitCardHtml).join('') + '</div>'
           : '<p class="hint block">Deze map is nog leeg. Kies via "Bewerken" welke outfits erin horen.</p>') +
+        packListHtml(f) +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/map/' + esc(f.id) + '/edit">Bewerken</a>' +
           '<button class="btn btn-danger" data-act="delete-folder" data-id="' + esc(f.id) + '">Verwijderen</button>' +
         '</div>' +
       '</div></div>';
+  }
+
+  /* Alle kledingstukken uit de outfits van een map, één keer, om af te vinken.
+     Handig als de map "Vakantie" heet en de koffer open ligt. */
+  function packListHtml(f) {
+    var items = folderItems(f);
+    if (!items.length) return '';
+    var packed = f.packed || [];
+    var klaar = items.filter(function (it) { return packed.indexOf(it.id) !== -1; }).length;
+
+    return '<h3 class="section-title">Paklijst (' + klaar + '/' + items.length + ')</h3>' +
+      '<div class="list">' + items.map(function (it) {
+        var on = packed.indexOf(it.id) !== -1;
+        var cat = catMap[it.category] || catMap.overig;
+        return '<div class="pack-row' + (on ? ' on' : '') + '" ' +
+          'data-act="toggle-pack" data-fid="' + esc(f.id) + '" data-id="' + esc(it.id) + '" ' +
+          'role="checkbox" aria-checked="' + on + '" tabindex="0">' +
+          '<span class="pack-box">' + (on ? '✓' : '') + '</span>' +
+          itemThumb(it, 'list-thumb') +
+          '<span class="list-text"><b>' + esc(it.name || 'Naamloos') + '</b>' +
+          '<span class="list-sub">' + esc(cat.label) + '</span></span></div>';
+      }).join('') + '</div>' +
+      (klaar
+        ? '<button class="btn btn-ghost btn-block" data-act="pack-reset" data-fid="' + esc(f.id) + '">Paklijst opnieuw beginnen</button>'
+        : '');
   }
 
   function viewFolderForm(id) {
@@ -1767,6 +2031,35 @@
         stat(totalWorn, 'keer gedragen') +
         stat(never, 'nooit gedragen') +
       '</div>' +
+
+      (function () {
+        var metPrijs = items.filter(function (i) { return i.price != null; });
+        if (!metPrijs.length) return '';
+        var waarde = metPrijs.reduce(function (s, i) { return s + i.price; }, 0);
+        var perStuk = waarde / metPrijs.length;
+
+        // Kosten per keer: wat een aankoop uiteindelijk waard bleek.
+        var gedragen = metPrijs.filter(function (i) { return (i.wearCount || 0) > 0; })
+          .map(function (i) { return { item: i, kpk: i.price / i.wearCount }; })
+          .sort(function (a, b) { return a.kpk - b.kpk; });
+
+        return '<div class="value-row">' +
+            '<span class="value-num">' + esc(euro(waarde)) + '</span>' +
+            '<span class="value-label">waarde van ' + plural(metPrijs.length, 'stuk', 'stukken') +
+              ' met een prijs · gemiddeld ' + esc(euro(perStuk)) + '</span>' +
+          '</div>' +
+          (gedragen.length
+            ? '<h3 class="section-title">Beste kopen (kosten per keer)</h3>' +
+              '<div class="list">' + gedragen.slice(0, 5).map(function (x) {
+                return '<a class="list-item" href="#/item/' + esc(x.item.id) + '">' +
+                  itemThumb(x.item, 'list-thumb') +
+                  '<span class="list-text"><b>' + esc(x.item.name || 'Naamloos') + '</b>' +
+                  '<span class="list-sub">' + esc(euro(x.kpk)) + ' per keer · ' +
+                    plural(x.item.wearCount, 'keer', 'keer') + ' gedragen</span></span>' +
+                  '<span class="chev">›</span></a>';
+              }).join('') + '</div>'
+            : '');
+      })() +
 
       '<h3 class="section-title">Doneren</h3>' +
       '<p class="hint block">Kleding die je niet meer draagt leg je op de doneerstapel. ' +
@@ -2332,12 +2625,110 @@
       render();
       toast('Genoteerd: vandaag gedragen');
     },
+    'unwear-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      await unmarkItemWorn(it);
+      render();
+      toast('Teruggedraaid');
+    },
     'wear-outfit': async function (btn) {
       var o = getOutfit(btn.getAttribute('data-id'));
       if (!o) return;
       await markOutfitWorn(o);
       render();
       toast('Genoteerd: vandaag gedragen');
+    },
+    'unwear-outfit': async function (btn) {
+      var o = getOutfit(btn.getAttribute('data-id'));
+      if (!o) return;
+      await unmarkOutfitWorn(o);
+      render();
+      toast('Teruggedraaid');
+    },
+
+    /* Agenda */
+    'week-prev': function () { state.weekOffset--; render(); },
+    'week-next': function () { state.weekOffset++; render(); },
+    'week-today': function () { state.weekOffset = 0; render(); },
+    'plan-day': function (btn) { openPlanSheet(btn.getAttribute('data-date')); },
+    'plan-pick': async function (btn) {
+      var date = btn.getAttribute('data-date');
+      var o = getOutfit(btn.getAttribute('data-id'));
+      if (!o) return;
+      closeOverlay();
+      if (date <= todayISO()) {
+        // Een dag van vandaag of eerder noteer je achteraf: dat is gedragen.
+        await markOutfitWorn(o, date);
+        toast('Genoteerd als gedragen');
+      } else {
+        await planOutfit(date, o.id);
+        toast('Ingepland');
+      }
+      render();
+    },
+    'plan-clear': async function (btn) {
+      var date = btn.getAttribute('data-date');
+      closeOverlay();
+      var worn = outfitWornOn(date);
+      if (worn) await unmarkOutfitWorn(worn, date);
+      await planOutfit(date, null);
+      render();
+      toast('Dag leeggemaakt');
+    },
+
+    'duplicate-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      toast('Kopie maken…');
+      var kopie = JSON.parse(JSON.stringify(it));
+      kopie.id = uid('itm');
+      kopie.name = (it.name || 'Naamloos') + ' (kopie)';
+      kopie.wearCount = 0;
+      kopie.wearDates = [];
+      kopie.lastWorn = null;
+      kopie.rating = null;
+      kopie.donate = false;
+      kopie.createdAt = Date.now();
+
+      // Foto's echt kopiëren: gedeelde beeldrecords zouden bij het verwijderen
+      // van het ene stuk de foto's van het andere meenemen.
+      var cover = coverImageOf(it);
+      var nieuweIds = [];
+      kopie.coverImageId = null;
+      for (var n = 0; n < it.imageIds.length; n++) {
+        var rec = await KastDB.get(KastDB.IMAGES, it.imageIds[n]);
+        if (!rec) continue;
+        var nid = uid('img');
+        await KastDB.put(KastDB.IMAGES, { id: nid, full: rec.full, thumb: rec.thumb });
+        nieuweIds.push(nid);
+        if (it.imageIds[n] === cover) kopie.coverImageId = nid;
+      }
+      kopie.imageIds = nieuweIds;
+      if (!kopie.coverImageId) kopie.coverImageId = nieuweIds[0] || null;
+
+      await saveItem(kopie);
+      toast('Kopie gemaakt');
+      go('#/item/' + kopie.id + '/edit');
+    },
+
+    'toggle-pack': async function (btn) {
+      var f = getFolder(btn.getAttribute('data-fid'));
+      if (!f) return;
+      var id = btn.getAttribute('data-id');
+      f.packed = f.packed || [];
+      f.packed = f.packed.indexOf(id) === -1
+        ? f.packed.concat([id])
+        : f.packed.filter(function (x) { return x !== id; });
+      await saveFolder(f);
+      render();
+    },
+    'pack-reset': async function (btn) {
+      var f = getFolder(btn.getAttribute('data-fid'));
+      if (!f) return;
+      f.packed = [];
+      await saveFolder(f);
+      render();
     },
 
     'delete-item': async function (btn) {
@@ -2561,17 +2952,11 @@
     ]);
     // Oudere of geïmporteerde records missen soms een veld; hier één keer rechtzetten.
     state.items = (res[0] || []).map(normalizeItem);
-    state.outfits = (res[1] || []).map(function (o) {
-      o.itemIds = o.itemIds || [];
-      o.seasons = o.seasons || [];
-      o.wearCount = o.wearCount || 0;
-      o.author = o.author || 'ik';
-      if (o.rating === undefined) o.rating = null;
-      return o;
-    });
+    state.outfits = (res[1] || []).map(normalizeOutfit);
     state.folders = (res[2] || []).map(function (f) {
       f.outfitIds = f.outfitIds || [];
       f.icon = f.icon || '📁';
+      f.packed = f.packed || [];
       return f;
     });
   }
