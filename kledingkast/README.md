@@ -74,9 +74,8 @@ internet.
 - Draagbeurten worden per dag geteld. Trek je een trui los aan en noteer je
   diezelfde dag ook de outfit waar hij in zit, dan is dat één draagbeurt — geen
   twee.
-- Vul je bij een kledingstuk een **prijs** in, dan rekent de app de **kosten per
-  keer** uit. Onder Meer zie je de waarde van je kast en welke aankopen zich het
-  best hebben terugverdiend.
+- Bij een kledingstuk en bij een outfit kun je optioneel een **prijs** invullen.
+  Onder Meer zie je daarmee de waarde van je kast.
 - Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie en per
   kleur, wat je het meest draagt en wat nog nooit aan is geweest.
 - Op een kledingstuk laat **"Combineer je met"** zien wat je er in de praktijk

@@ -381,6 +381,7 @@
       notes: '', favorite: false, wearCount: 0, lastWorn: null,
       author: author || 'ik',   // 'ik' of 'askim'
       rating: null,             // cijfer van Askim, 1 t/m 10
+      price: null,              // optionele prijs, bijv. voor iets wat je nog wilt kopen
       wearDates: [],            // op welke dagen gedragen
       plannedDates: [],         // voor welke dagen ingepland
       createdAt: Date.now(), updatedAt: Date.now()
@@ -427,6 +428,7 @@
     o.wearCount = o.wearCount || 0;
     o.author = o.author || 'ik';
     if (o.rating === undefined) o.rating = null;
+    if (o.price === undefined) o.price = null;
     if (!o.wearDates) o.wearDates = o.lastWorn ? [o.lastWorn] : [];
     if (!o.plannedDates) o.plannedDates = [];
     return o;
@@ -1058,10 +1060,7 @@
     if (it.size) rows += metaRow('Maat', it.size);
     rows += metaRow('Gedragen', (it.wearCount || 0) + ' keer' +
       (it.lastWorn ? ' · laatst ' + formatDate(it.lastWorn) : ''));
-    if (it.price != null) {
-      rows += metaRow('Prijs', euro(it.price));
-      if (it.wearCount > 0) rows += metaRow('Per keer', euro(it.price / it.wearCount));
-    }
+    if (it.price != null) rows += metaRow('Prijs', euro(it.price));
     rows += metaRow('Cijfer van Askim', it.rating ? it.rating + ' / 10' : 'nog geen cijfer');
 
     // Meer dan één foto? Dan een strookje eronder om doorheen te bladeren.
@@ -1427,6 +1426,7 @@
             ? o.seasons.map(function (s) { return (seasonMap[s] || {}).label || s; }).join(', ')
             : 'Het hele jaar door') +
           metaRow('Gedragen', (o.wearCount || 0) + ' keer' + (o.lastWorn ? ' · laatst ' + formatDate(o.lastWorn) : '')) +
+          (o.price != null ? metaRow('Prijs', euro(o.price)) : '') +
           metaRow('Samengesteld door', o.author === 'askim' ? 'Askim' : 'jou') +
           ((o.plannedDates || []).filter(function (d) { return d >= todayISO(); }).length
             ? metaRow('Ingepland', o.plannedDates.filter(function (d) { return d >= todayISO(); })
@@ -1507,6 +1507,10 @@
       '<div class="field"><label>Seizoen <span class="hint">(leeg = hele jaar)</span></label>' +
         '<div class="chips">' + chipRow(SEASONS, o.seasons, 'draft-oseason') + '</div></div>' +
 
+      '<div class="field"><label for="o-price">Prijs <span class="hint">(optioneel)</span></label>' +
+        '<input id="o-price" class="input" type="text" inputmode="decimal" placeholder="\u20ac" ' +
+          'value="' + (o.price != null ? esc(o.price) : '') + '" autocomplete="off"></div>' +
+
       '<div class="field"><label for="o-notes">Notities</label>' +
         '<textarea id="o-notes" class="input textarea" rows="3">' + esc(o.notes) + '</textarea></div>' +
 
@@ -1525,9 +1529,14 @@
     var name = document.getElementById('o-name');
     var notes = document.getElementById('o-notes');
     var fav = document.getElementById('o-fav');
+    var prijsVeld = document.getElementById('o-price');
     if (name) d.data.name = name.value.trim();
     if (notes) d.data.notes = notes.value.trim();
     if (fav) d.data.favorite = !!fav.checked;
+    if (prijsVeld) {
+      var prijs = parseFloat(prijsVeld.value.replace(',', '.').replace(/[^0-9.]/g, ''));
+      d.data.price = isNaN(prijs) ? null : Math.round(prijs * 100) / 100;
+    }
   }
 
   async function commitOutfit() {
@@ -2038,27 +2047,11 @@
         var waarde = metPrijs.reduce(function (s, i) { return s + i.price; }, 0);
         var perStuk = waarde / metPrijs.length;
 
-        // Kosten per keer: wat een aankoop uiteindelijk waard bleek.
-        var gedragen = metPrijs.filter(function (i) { return (i.wearCount || 0) > 0; })
-          .map(function (i) { return { item: i, kpk: i.price / i.wearCount }; })
-          .sort(function (a, b) { return a.kpk - b.kpk; });
-
         return '<div class="value-row">' +
             '<span class="value-num">' + esc(euro(waarde)) + '</span>' +
             '<span class="value-label">waarde van ' + plural(metPrijs.length, 'stuk', 'stukken') +
               ' met een prijs · gemiddeld ' + esc(euro(perStuk)) + '</span>' +
-          '</div>' +
-          (gedragen.length
-            ? '<h3 class="section-title">Beste kopen (kosten per keer)</h3>' +
-              '<div class="list">' + gedragen.slice(0, 5).map(function (x) {
-                return '<a class="list-item" href="#/item/' + esc(x.item.id) + '">' +
-                  itemThumb(x.item, 'list-thumb') +
-                  '<span class="list-text"><b>' + esc(x.item.name || 'Naamloos') + '</b>' +
-                  '<span class="list-sub">' + esc(euro(x.kpk)) + ' per keer · ' +
-                    plural(x.item.wearCount, 'keer', 'keer') + ' gedragen</span></span>' +
-                  '<span class="chev">›</span></a>';
-              }).join('') + '</div>'
-            : '');
+          '</div>';
       })() +
 
       '<h3 class="section-title">Doneren</h3>' +
@@ -2337,6 +2330,7 @@
       o.favorite = !!o.favorite;
       o.occasion = o.occasion || 'dagelijks';
       if (o.rating === undefined) o.rating = null;
+      if (o.price === undefined) o.price = null;
       await saveOutfit(o);
       outfitsAdded++;
     }
