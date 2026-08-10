@@ -190,6 +190,85 @@
 
   function go(hash) { location.hash = hash; }
 
+  /* ─────────────────── Zichtbaar bewegende onderdelen ─────────────────── */
+
+  var CONFETTI_KLEUREN = ['#b73338', '#e7c04b', '#3e7a51', '#2f5da8', '#8c5a34', '#e6a2b7'];
+
+  /* Een uitbarsting snippers vanaf een punt op het scherm. */
+  function confetti(x, y) {
+    if (prefersReduced()) return;
+    var laag = document.createElement('div');
+    laag.className = 'confetti';
+    laag.style.left = Math.round(x) + 'px';
+    laag.style.top = Math.round(y) + 'px';
+    for (var i = 0; i < 30; i++) {
+      var snipper = document.createElement('i');
+      var hoek = (Math.random() * 2 - 1) * 1.2;          // radialen vanaf recht omhoog
+      var kracht = 110 + Math.random() * 170;
+      snipper.style.setProperty('--dx', Math.round(Math.sin(hoek) * kracht) + 'px');
+      snipper.style.setProperty('--dy', Math.round(-Math.cos(hoek) * kracht) + 'px');
+      snipper.style.setProperty('--rot', Math.round(Math.random() * 900 - 450) + 'deg');
+      snipper.style.animationDelay = Math.round(Math.random() * 140) + 'ms';
+      snipper.style.background = CONFETTI_KLEUREN[i % CONFETTI_KLEUREN.length];
+      if (i % 3 === 0) snipper.style.borderRadius = '50%';
+      laag.appendChild(snipper);
+    }
+    document.body.appendChild(laag);
+    setTimeout(function () { laag.remove(); }, 1800);
+  }
+
+  function confettiOp(el) {
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    confetti(r.left + r.width / 2, r.top + r.height / 2);
+  }
+
+  /* Zichtbare draaiende ring terwijl foto's verkleind worden — dat duurt
+     bij meerdere foto's lang genoeg om te merken. */
+  function toonBezig(tekst) {
+    verbergBezig();
+    var el = document.createElement('div');
+    el.className = 'bezig';
+    el.id = 'bezig';
+    el.innerHTML = '<div class="bezig-kaart"><i class="ring"></i><span></span></div>';
+    el.querySelector('span').textContent = tekst;
+    document.body.appendChild(el);
+  }
+
+  function verbergBezig() {
+    var el = document.getElementById('bezig');
+    if (el) el.remove();
+  }
+
+  /* De aangetikte tegel vliegt naar de teller, zodat je ziet waar hij heen gaat. */
+  function vliegNaarTeller(bron) {
+    var doel = document.getElementById('pickCount');
+    if (!doel || !bron || prefersReduced()) return;
+    var a = bron.getBoundingClientRect();
+    var b = doel.getBoundingClientRect();
+    var kloon = bron.cloneNode(true);
+    kloon.className = 'vlieger';
+    kloon.style.left = a.left + 'px';
+    kloon.style.top = a.top + 'px';
+    kloon.style.width = a.width + 'px';
+    kloon.style.height = a.height + 'px';
+    document.body.appendChild(kloon);
+    requestAnimationFrame(function () {
+      kloon.style.transform = 'translate(' + Math.round(b.left - a.left + b.width / 2 - a.width / 2) + 'px,' +
+        Math.round(b.top - a.top + b.height / 2 - a.height / 2) + 'px) scale(.1)';
+      kloon.style.opacity = '0.15';
+    });
+    setTimeout(function () {
+      kloon.remove();
+      // De teller blijft staan zolang het vel open is, dus de klasse moet er
+      // ook weer af — anders speelt het wipje de tweede keer niet.
+      doel.classList.remove('tel-pop');
+      void doel.offsetWidth;
+      doel.classList.add('tel-pop');
+      setTimeout(function () { doel.classList.remove('tel-pop'); }, 440);
+    }, 480);
+  }
+
   function prefersReduced() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
@@ -231,7 +310,12 @@
     render();
     if (!opAskim || prefersReduced()) return;
     var nieuw = document.querySelector('.askim-card');
-    if (nieuw) nieuw.classList.add('nieuw');
+    if (!nieuw) return;
+    nieuw.classList.add('nieuw');
+    // Rij leeg? Dan is er iets te vieren.
+    if (nieuw.classList.contains('done')) {
+      setTimeout(function () { confettiOp(nieuw); }, 220);
+    }
   }
 
   function stopOvergang() {
@@ -953,7 +1037,7 @@
     var style = bg ? ' style="background:' + esc(bg) + '"' : '';
     var cover = coverImageOf(item);
     var photo = cover ? '<img class="ph-img" data-img="' + esc(cover) + ':thumb" alt="">' : '';
-    return '<div class="' + (cls || 'tile-photo') + '">' +
+    return '<div class="' + (cls || 'tile-photo') + (cover ? ' laadt' : '') + '">' +
              '<div class="ph-fallback"' + style + '><span>' + cat.icon + '</span></div>' +
              photo +
            '</div>';
@@ -985,9 +1069,15 @@
     return out;
   }
 
+  var HANGER_SVG = '<svg class="hanger-zwaai" viewBox="0 0 512 512" aria-hidden="true">' +
+    '<g fill="none" stroke="currentColor" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M256 243 L256 207 A 32 32 0 1 1 288 179"/>' +
+      '<path d="M256 243 L106 357 L406 357 Z"/>' +
+    '</g></svg>';
+
   function emptyState(icon, title, text, action) {
     return '<div class="empty">' +
-      '<div class="empty-icon">' + icon + '</div>' +
+      '<div class="empty-icon">' + (icon === 'hanger' ? HANGER_SVG : icon) + '</div>' +
       '<h2 class="empty-title">' + esc(title) + '</h2>' +
       '<p class="empty-text">' + esc(text) + '</p>' +
       (action || '') + '</div>';
@@ -1098,7 +1188,7 @@
     els.view.innerHTML = view;
     els.view.setAttribute('data-route', parts[0]);
     var tabNu = rootTab(parts);
-    els.tabbar.innerHTML = tabBar(tabNu);
+    zetActieveTab(tabNu);
 
     // Alleen bij een echte schermwissel laten opkomen — niet bij elk tikje
     // op een filterchip, want dan knippert het hele scherm mee.
@@ -1116,7 +1206,15 @@
       if (tabNu !== lastTab) {
         lastTab = tabNu;
         var icoon = els.tabbar.querySelector('.tab.active .tab-icon');
-        if (icoon) icoon.classList.add('pop');
+        if (icoon) {
+          // Het icoon blijft nu bestaan tussen schermen door, dus de klasse
+          // moet er eerst af voordat de animatie opnieuw speelt — en er ná
+          // afloop weer af, anders blijft hij op een oud tabblad plakken.
+          icoon.classList.remove('pop');
+          void icoon.offsetWidth;
+          icoon.classList.add('pop');
+          setTimeout(function () { icoon.classList.remove('pop'); }, 520);
+        }
       }
       if (parts[0] === 'meer') {
         Array.prototype.forEach.call(els.view.querySelectorAll('.stat-num[data-target]'), telOp);
@@ -1142,18 +1240,39 @@
       '</g></svg>' +
     '<span class="brand-name">Kledingkast</span></div>';
 
-  function tabBar(active) {
-    var tabs = [
-      { key: 'kast', href: '#/kast', icon: '🚪', label: 'Kast' },
-      { key: 'outfits', href: '#/outfits', icon: '✨', label: 'Outfits' },
-      { key: 'askim', href: '#/askim', icon: '💛', label: 'Askim' },
-      { key: 'meer', href: '#/meer', icon: '☰', label: 'Meer' }
-    ];
-    return BRAND + tabs.map(function (t) {
-      return '<a class="tab' + (t.key === active ? ' active' : '') + '" href="' + t.href + '"' +
-        (t.key === active ? ' aria-current="page"' : '') + '>' +
+  var TABS = [
+    { key: 'kast', href: '#/kast', icon: '🚪', label: 'Kast' },
+    { key: 'outfits', href: '#/outfits', icon: '✨', label: 'Outfits' },
+    { key: 'askim', href: '#/askim', icon: '💛', label: 'Askim' },
+    { key: 'meer', href: '#/meer', icon: '☰', label: 'Meer' }
+  ];
+
+  /* De tabbalk wordt één keer gebouwd en daarna alleen bijgewerkt. Zou hij
+     elke keer opnieuw getekend worden, dan is het streepje telkens een nieuw
+     element en schuift het nergens heen. */
+  function bouwTabbar() {
+    if (els.tabbar.getAttribute('data-gebouwd')) return;
+    els.tabbar.innerHTML = BRAND + TABS.map(function (t) {
+      return '<a class="tab" data-tab="' + t.key + '" href="' + t.href + '">' +
         '<span class="tab-icon">' + t.icon + '</span><span class="tab-label">' + t.label + '</span></a>';
-    }).join('');
+    }).join('') + '<i class="tab-indicator" aria-hidden="true"></i>';
+    els.tabbar.setAttribute('data-gebouwd', '1');
+  }
+
+  function zetActieveTab(active) {
+    bouwTabbar();
+    TABS.forEach(function (t, i) {
+      var el = els.tabbar.querySelector('.tab[data-tab="' + t.key + '"]');
+      if (!el) return;
+      var aan = t.key === active;
+      el.classList.toggle('active', aan);
+      if (aan) {
+        el.setAttribute('aria-current', 'page');
+        els.tabbar.style.setProperty('--tab-i', i);
+      } else {
+        el.removeAttribute('aria-current');
+      }
+    });
   }
 
   function segment(active) {
@@ -1253,7 +1372,7 @@
 
   function viewKast() {
     if (!state.items.length) {
-      return emptyState('🧺', 'Je kast is nog leeg',
+      return emptyState('hanger', 'Je kast is nog leeg',
         'Voeg je eerste kledingstuk toe met een foto, of zet in één keer meerdere foto\'s in de kast.',
         '<div class="empty-actions">' +
           '<button class="btn btn-primary" data-act="new-item">Kledingstuk toevoegen</button>' +
@@ -3014,10 +3133,13 @@
     'picker-toggle': function (btn) {
       var id = btn.getAttribute('data-id');
       var i = state.pickerSel.indexOf(id);
-      if (i === -1) state.pickerSel.push(id); else state.pickerSel.splice(i, 1);
+      var kiezen = i === -1;
+      if (kiezen) state.pickerSel.push(id); else state.pickerSel.splice(i, 1);
       btn.classList.toggle('selected');
       var count = document.getElementById('pickCount');
       if (count) count.textContent = state.pickerSel.length;
+      // Alleen bij kiezen; bij loslaten zou een vliegend plaatje verwarren.
+      if (kiezen) vliegNaarTeller(btn.querySelector('.tile-photo') || btn);
     },
     'unpick-item': function (btn) {
       syncOutfitDraftFromDom();
@@ -3146,11 +3268,17 @@
       if (!f) return;
       var id = btn.getAttribute('data-id');
       f.packed = f.packed || [];
+      // Een verse map heeft nog geen packed-lijst, dus eerst aanvullen en dan
+      // pas kijken of de koffer al rond was.
+      var wasVol = f.packed.length >= folderItems(f).length;
       f.packed = f.packed.indexOf(id) === -1
         ? f.packed.concat([id])
         : f.packed.filter(function (x) { return x !== id; });
+      var nuVol = f.packed.length >= folderItems(f).length;
       await saveFolder(f);
       render();
+      // Koffer rond: even feest.
+      if (nuVol && !wasVol) confettiOp(document.querySelector('.section-title') || els.view);
     },
     'pack-reset': async function (btn) {
       var f = getFolder(btn.getAttribute('data-fid'));
@@ -3362,7 +3490,7 @@
     ev.target.value = '';
     if (!files.length || !state.draft || state.draft.kind !== 'item') return;
     syncItemDraftFromDom();
-    toast(files.length > 1 ? files.length + ' foto\'s verwerken…' : 'Foto verwerken…');
+    toonBezig(files.length > 1 ? files.length + ' foto\'s verwerken…' : 'Foto verwerken…');
     var d = state.draft;
     var added = 0;
     var herkend = null;
@@ -3381,6 +3509,7 @@
         added++;
       } catch (err) { /* sla onleesbare bestanden over */ }
     }
+    verbergBezig();
     render();
     if (!added) toast('Kan deze foto niet gebruiken');
     else if (herkend) toast('Kleur uit de foto: ' + herkend.map(colorLabel).join(' en '));
@@ -3390,7 +3519,7 @@
     var files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = '';
     if (!files.length) return;
-    toast(files.length + ' foto\'s verwerken…');
+    toonBezig(files.length + ' foto\'s verwerken…');
     var made = 0;
     for (var i = 0; i < files.length; i++) {
       try {
@@ -3406,6 +3535,7 @@
         made++;
       } catch (err) { /* sla onleesbare bestanden over */ }
     }
+    verbergBezig();
     render();
     toast(made + ' toegevoegd — vul ze nu verder in');
   }

@@ -171,6 +171,24 @@ een kledingstuk, van een kledingstuk naar het bewerkscherm) komt van rechts,
 terugkomen van links, en tussen tabbladen komt het scherm gewoon op. Tegels en
 lijstrijen verschijnen kort na elkaar in plaats van als één blok.
 
+Er zijn een paar dingen die je écht ziet bewegen:
+
+- Een **streepje onder de tabbalk** schuift mee naar het tabblad waar je heen
+  gaat, in plaats van meteen op te duiken. Op de pc staat het niet in de weg:
+  daar markeert de gevulde rij in de zijbalk het actieve tabblad al.
+- **Snippers** vliegen omhoog op de twee momenten dat er iets af is: als de
+  beoordeelrij van Askim leeg is, en als een paklijst helemaal afgevinkt is.
+- Een **draaiende ring** staat in beeld terwijl foto's verkleind worden. Bij een
+  handvol foto's tegelijk duurt dat lang genoeg om anders te denken dat er niets
+  gebeurt.
+- De **tegel die je aantikt** in het kieslijstje vliegt krimpend naar de teller
+  in de knop "Klaar", en die teller wipt bij aankomst. Alleen bij kiezen — bij
+  loslaten zou een vliegend plaatje verwarren.
+- Een **zwaaiende hanger** vult de lege kast, en de andere lege schermen laten
+  hun icoon rustig op en neer wippen.
+- Zolang de foto van een tegel nog uit de database moet komen, loopt er een
+  **glans** overheen.
+
 Verder beweegt:
 
 - De **foto op een detailscherm** komt met een zoom naar voren.
@@ -183,7 +201,7 @@ Verder beweegt:
   bron van waarheid is.
 - "🎲 Verras me" laat de gekozen stukken één voor één binnenvallen.
 
-Twee dingen om te weten als je hieraan sleutelt:
+Een paar dingen om te weten als je hieraan sleutelt:
 
 - De overgang speelt alleen bij een echte routewissel, en de klasse wordt daarna
   weer weggehaald. Zonder dat zou het raster opnieuw komen opzetten bij elke
@@ -191,6 +209,14 @@ Twee dingen om te weten als je hieraan sleutelt:
 - De opkomst verschuift tegels een stukje naar beneden. Daardoor viel de onderste
   tegel net buiten de voorlaadmarge van het lui laden van foto's; die marge staat
   daarom op 900 px.
+- De tabbalk wordt nog maar **één keer** gebouwd en daarna alleen bijgewerkt.
+  Zou hij bij elke tekenbeurt opnieuw gemaakt worden, dan was het streepje elke
+  keer een nieuw element en schoof het nergens heen. Keerzijde: elementen die
+  blijven bestaan houden hun animatieklasse vast, dus die moet er na afloop met
+  een `setTimeout` weer af — anders wipt het icoon de tweede keer niet meer.
+- De snippers en de vlieger hangen aan `document.body`, buiten het scherm dat
+  ververst wordt, zodat een tekenbeurt ze niet halverwege weghaalt. Ze ruimen
+  zichzelf op.
 
 Alles hierboven verdwijnt zodra het systeem om minder beweging vraagt.
 

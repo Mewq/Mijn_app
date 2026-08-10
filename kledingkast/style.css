@@ -1553,6 +1553,135 @@ input, textarea, select { font: inherit; }
 .view[class*="enter-"] .list > *:nth-child(n+5),
 .view[class*="enter-"] .day-list > *:nth-child(n+5) { animation-delay: .14s; }
 
+/* ═════════════════ Dingen die echt over het scherm bewegen ═══════════════ */
+
+/* Streepje dat van tabblad naar tabblad schuift. */
+.tabbar { position: relative; }
+
+.tab-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 25%;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--accent);
+  transform: translateX(calc(var(--tab-i, 0) * 100%));
+  transition: transform .45s var(--veer);
+}
+
+/* Snippers bij iets om te vieren. */
+.confetti { position: fixed; z-index: 40; pointer-events: none; }
+
+.confetti i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: snipper 1.25s cubic-bezier(.15, .7, .35, 1) forwards;
+}
+
+@keyframes snipper {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0) scale(.5); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 260px)) rotate(var(--rot)) scale(1); }
+}
+
+/* Draaiende ring terwijl foto's verkleind worden. */
+.bezig {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  animation: fadeIn .18s ease both;
+}
+
+.bezig-kaart {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 20px;
+  font-size: 14.5px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lift);
+}
+
+.ring {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: draai .8s linear infinite;
+}
+
+@keyframes draai { to { transform: rotate(360deg); } }
+
+/* De aangetikte tegel die naar de teller vliegt. */
+.vlieger {
+  position: fixed;
+  z-index: 45;
+  pointer-events: none;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-lift);
+  transition: transform .5s var(--veer), opacity .5s ease;
+}
+
+@keyframes telPop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.7); }
+  100% { transform: scale(1); }
+}
+
+.tel-pop { display: inline-block; animation: telPop .42s cubic-bezier(.2, .9, .3, 1); }
+
+/* Hanger die zachtjes heen en weer zwaait in een leeg scherm. */
+.hanger-zwaai {
+  width: 76px;
+  height: 76px;
+  color: var(--accent);
+  transform-origin: 50% 18%;
+  animation: zwaai 3.2s ease-in-out infinite;
+}
+
+@keyframes zwaai {
+  0%, 100% { transform: rotate(-9deg); }
+  50% { transform: rotate(9deg); }
+}
+
+/* Emoji in lege schermen dobbert rustig op en neer. */
+@keyframes dobber {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+.empty-icon { animation: dobber 3s ease-in-out infinite; }
+.empty-icon:has(.hanger-zwaai) { animation: none; }
+
+/* Glans over een tegel zolang de foto nog uit de database moet komen. */
+.laadt:not(.has-photo) .ph-fallback::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, .38) 50%, transparent 75%);
+  animation: glans 1.5s ease-in-out infinite;
+}
+
+@keyframes glans {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
 /* ───────────────────── Beweging op losse onderdelen ────────────────────── */
 
 /* De foto van een detailscherm komt naar je toe. */
@@ -1637,6 +1766,8 @@ input, textarea, select { font: inherit; }
 
   .brand-mark { width: 24px; height: 24px; flex: none; color: var(--accent); }
   .brand-name { font-family: var(--font-display); font-size: 19px; letter-spacing: -.01em; }
+  /* In de zijbalk markeert de gevulde rij al waar je bent. */
+  .tab-indicator { display: none; }
   .sheet { border-radius: 22px; }
   .sheet-head { padding-top: 10px; }
   .sheet-head::before { display: none; }
