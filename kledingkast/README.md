@@ -48,6 +48,24 @@ internet.
   foto's worden echt gekopieerd, niet gedeeld — verwijder je het origineel, dan
   houdt de kopie gewoon haar eigen foto's.
 
+**Stylist**
+- Het tabblad **🪄 Stylist** legt je kast in lagen boven elkaar: **Boven**
+  (truien en shirts), daaronder **Onder** (broeken en rokken), daaronder
+  **Schoenen**. Daar weer onder staan **Jas** en **Erbij** (tassen en
+  accessoires) voor wat je er nog overheen of bij doet.
+- Per laag blader je zijwaarts door je kast. Tik een stuk aan en het blijft
+  staan met een rand en een vinkje; de rest van die laag treedt terug. Nog eens
+  tikken haalt de keuze weer weg, en het kruisje in de kop slaat de hele laag
+  over — want soms draag je geen jas.
+- Het balkje onderaan telt op wat je gekozen hebt. "Bewaren" zet het als concept
+  klaar in het gewone outfitformulier, waar je het een naam en een gelegenheid
+  geeft. Zo blijft er één plek waar outfits ontstaan.
+- 🎲 rechtsboven draait alle lagen tegelijk naar een willekeurig stuk, de een na
+  de ander, en de banen schuiven zichtbaar mee.
+- Alleen kleding die **in je kast** ligt doet mee: wat in de wasmand of op de
+  doneerstapel ligt blijft weg. Met de seizoensknoppen bovenaan filter je de
+  lagen, en favorieten en hoge cijfers van Askim staan vooraan.
+
 **Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
   gelegenheid, seizoen en notities.
@@ -188,6 +206,8 @@ Er zijn een paar dingen die je écht ziet bewegen:
   hun icoon rustig op en neer wippen.
 - Zolang de foto van een tegel nog uit de database moet komen, loopt er een
   **glans** overheen.
+- In de stylist rollen de **banen** één voor één van rechts binnen, en 🎲 laat ze
+  na elkaar naar hun nieuwe stuk draaien.
 
 Verder beweegt:
 
@@ -226,8 +246,14 @@ Dezelfde HTML, twee indelingen. Op een smal scherm staat de navigatie onderaan
 als tabbalk en is het raster twee kolommen breed. Vanaf 900 px wordt diezelfde
 tabbalk een zijbalk links, groeit het raster naar vier of vijf kolommen, en
 komen op een detailscherm de foto en de gegevens naast elkaar te staan met de
-foto meescrollend in beeld. Muisaanwijzers krijgen hover-feedback die op touch
-niets in de weg zit.
+foto meescrollend in beeld. In de stylist worden de banen daar ruimer en de
+kaarten groter. Muisaanwijzers krijgen hover-feedback die op touch niets in de
+weg zit.
+
+De drie kernlagen van de stylist passen op een telefoon samen in beeld. Dat is
+geen toeval maar een grens waar de maten omheen gekozen zijn: kaarten van 98 px
+breed, een kop van één regel en compacte seizoenschips. Wordt daar iets groter,
+dan valt de schoenenbaan onder de vouw en is het idee weg.
 
 Onder **Meer → Weergave** kies je het thema: systeem, licht of donker. Die keuze
 wordt onthouden en al vóór het tekenen toegepast, zodat er niets flikkert.
@@ -276,8 +302,20 @@ te makkelijk en lieten precies deze fout door.
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`
 rekt alleen de root op, niet de scrollende containers ertussen. De waarnemer
-krijgt daarom de echte scrollcontainer (`.view` of `.sheet-body`) als root — met
-de standaardroot laadt niets onder de vouw.
+krijgt daarom de echte scrollcontainer (`.rail`, `.view` of `.sheet-body`) als
+root — met de standaardroot laadt niets onder de vouw. De banen van de stylist
+schuiven zijwaarts, dus de marge staat aan alle vier de kanten.
+
+De stylist tekent niet opnieuw als je een stuk aantikt. Dat is met opzet: een
+tekenbeurt zou alle banen terugspoelen naar het begin terwijl jij net ergens in
+het midden aan het bladeren was. In plaats daarvan wisselen de klassen op de
+kaarten en werken alleen de teller in de kop en het balkje onderaan zich bij.
+Wat wél opnieuw tekent — het seizoensfilter — zet daarna elke baan meteen weer
+op het gekozen stuk.
+
+Een baan kan niet voorbij zijn eigen einde schuiven. Het laatste stuk van een
+korte baan komt dus niet precies in het midden, alleen helemaal in beeld. Dat
+is normaal gedrag van een scroller, geen bug om omheen te bouwen.
 
 Pas je `app.js`, `style.css`, `db.js` of `index.html` aan, verhoog dan het
 versienummer `CACHE` bovenin `sw.js`. Anders blijven bezoekers de oude versie

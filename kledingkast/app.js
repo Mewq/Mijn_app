@@ -69,6 +69,16 @@
     { cats: ['accessoires', 'tassen'], required: false }
   ];
 
+  /* De banen van de stylist, van boven naar beneden zoals je je aankleedt.
+     De eerste drie zijn de kern; wat daaronder staat is erbij. */
+  var STYLE_LANES = [
+    { key: 'boven',    icon: '👕', label: 'Boven',    hint: 'Truien, shirts',      cats: ['tops', 'truien'] },
+    { key: 'onder',    icon: '👖', label: 'Onder',    hint: 'Broeken, rokken',     cats: ['broeken', 'rokken'] },
+    { key: 'schoenen', icon: '👟', label: 'Schoenen', hint: '',                    cats: ['schoenen'] },
+    { key: 'jas',      icon: '🧥', label: 'Jas',      hint: 'Erover',              cats: ['jassen'], extra: true },
+    { key: 'extra',    icon: '👜', label: 'Erbij',    hint: 'Tassen, accessoires', cats: ['tassen', 'accessoires'], extra: true }
+  ];
+
   var catMap = index(CATEGORIES);
   var colorMap = index(COLORS);
   var seasonMap = index(SEASONS);
@@ -98,7 +108,9 @@
     askimRateMode: 'items', // beoordeelt Askim nu kleding of outfits?
     outfitSort: 'recent',
     outfitFilter: { q: '', occasion: '', author: '' },
-    weekOffset: 0           // 0 = deze week in de agenda
+    weekOffset: 0,          // 0 = deze week in de agenda
+    stylist: {},            // baan -> gekozen kledingstuk-id
+    stylistSeason: ''       // filter op seizoen in de stylist
   };
 
   var els = {};
@@ -612,7 +624,8 @@
 
   /* rootMargin rekt alleen de root van de waarnemer op, niet de scrollende
      containers daartussen. Een raster dat in .view scrolt heeft dus een
-     waarnemer nodig met .view als root, anders laadt niets onder de vouw. */
+     waarnemer nodig met .view als root, anders laadt niets onder de vouw.
+     Hetzelfde geldt voor de banen van de stylist, maar dan zijwaarts. */
   function observerFor(scroller) {
     var key = scroller || 'venster';
     if (!observers.has(key)) {
@@ -624,7 +637,7 @@
         });
         // Ruim genomen: de opkomstanimatie verschuift tegels een stukje naar
         // beneden, en met een krappe marge viel de onderste er net buiten.
-      }, { root: scroller || null, rootMargin: '900px 0px' }));
+      }, { root: scroller || null, rootMargin: '900px' }));
     }
     return observers.get(key);
   }
@@ -640,7 +653,7 @@
         loadImgEl(img);
         return;
       }
-      observerFor(img.closest('.view, .sheet-body')).observe(img);
+      observerFor(img.closest('.rail, .view, .sheet-body')).observe(img);
     });
   }
 
@@ -1096,6 +1109,7 @@
     if (parts[0] === 'kast' || parts[0] === 'item') return 'kast';
     if (parts[0] === 'outfits' || parts[0] === 'outfit') return 'outfits';
     if (parts[0] === 'mappen' || parts[0] === 'map' || parts[0] === 'agenda') return 'outfits';
+    if (parts[0] === 'stylist') return 'stylist';
     if (parts[0] === 'askim') return 'askim';
     if (parts[0] === 'meer' || parts[0] === 'doneren') return 'meer';
     return 'kast';
@@ -1168,6 +1182,11 @@
         top = topBar('Agenda');
         view = viewAgenda();
         break;
+      case 'stylist':
+        top = topBar('Stylist', null,
+          '<button class="icon-btn" data-act="style-shuffle" title="Verras me">🎲</button>');
+        view = viewStylist();
+        break;
       case 'map':
         if (parts[1] === 'new') { top = topBar('Nieuwe map', '#/mappen'); view = viewFolderForm(null); }
         else if (parts[2] === 'edit') { top = topBar('Map bewerken', '#/map/' + parts[1]); view = viewFolderForm(parts[1]); }
@@ -1222,6 +1241,9 @@
     }
 
     hydrateImages(els.view);
+    // Elke baan begint op het stuk dat al gekozen was, anders sta je na een
+    // tekenbeurt weer helemaal links terwijl je keuze verderop staat.
+    if (parts[0] === 'stylist') centreerBanen();
   }
 
   function topBar(title, backHref, actions) {
@@ -1242,6 +1264,7 @@
 
   var TABS = [
     { key: 'kast', href: '#/kast', icon: '🚪', label: 'Kast' },
+    { key: 'stylist', href: '#/stylist', icon: '🪄', label: 'Stylist' },
     { key: 'outfits', href: '#/outfits', icon: '✨', label: 'Outfits' },
     { key: 'askim', href: '#/askim', icon: '💛', label: 'Askim' },
     { key: 'meer', href: '#/meer', icon: '☰', label: 'Meer' }
@@ -1256,6 +1279,8 @@
       return '<a class="tab" data-tab="' + t.key + '" href="' + t.href + '">' +
         '<span class="tab-icon">' + t.icon + '</span><span class="tab-label">' + t.label + '</span></a>';
     }).join('') + '<i class="tab-indicator" aria-hidden="true"></i>';
+    // Het streepje is precies één tabblad breed, hoeveel tabbladen er ook zijn.
+    els.tabbar.style.setProperty('--tab-n', TABS.length);
     els.tabbar.setAttribute('data-gebouwd', '1');
   }
 
@@ -1783,7 +1808,10 @@
           ? 'Combineer kledingstukken uit je kast tot een outfit die je later zo terugvindt.'
           : 'Voeg eerst wat kleding toe aan je kast, dan kun je die hier combineren.',
         state.items.length
-          ? '<button class="btn btn-primary" data-act="new-outfit">Outfit maken</button>'
+          ? '<div class="empty-actions">' +
+              '<a class="btn btn-primary" href="#/stylist">🪄 Naar de stylist</a>' +
+              '<button class="btn btn-ghost" data-act="new-outfit">Zelf samenstellen</button>' +
+            '</div>'
           : '<button class="btn btn-primary" data-act="new-item">Kledingstuk toevoegen</button>');
     }
     var f = state.outfitFilter;
@@ -2055,6 +2083,200 @@
     render();
     var strip = document.querySelector('.sel-strip');
     if (strip && !prefersReduced()) strip.classList.add('verrast');
+  }
+
+  /* ──────────────────────────────── Stylist ────────────────────────────────
+     Drie banen boven elkaar — boven, onder, schoenen — waar je zijwaarts
+     doorheen bladert. Wat in het midden staat is wat je aanhebt. */
+
+  function laneItems(lane) {
+    var seizoen = state.stylistSeason;
+    return state.items.filter(function (it) {
+      if (lane.cats.indexOf(it.category) === -1) return false;
+      if (bucketOf(it) !== 'kast') return false;      // in de was of weg telt niet mee
+      return itemMatchesSeason(it, seizoen);
+    }).sort(function (a, b) {
+      // Wat je mooi vindt vooraan, dan wat Askim hoog heeft staan.
+      return (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) ||
+        (b.rating || 0) - (a.rating || 0) ||
+        (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  }
+
+  /* Alles wat nu gekozen is, in de volgorde van de banen. */
+  function stylistIds() {
+    return STYLE_LANES.map(function (l) { return state.stylist[l.key]; })
+      .filter(function (id) { return id && getItem(id); });
+  }
+
+  function viewStylist() {
+    if (!state.items.length) {
+      return emptyState('hanger', 'Nog niets om mee te spelen',
+        'Zet eerst wat kleding in je kast. Daarna blader je hier per laag door je kast en zet je in een paar tikken een outfit in elkaar.',
+        '<button class="btn btn-primary" data-act="new-item">Kledingstuk toevoegen</button>');
+    }
+
+    var banen = STYLE_LANES.map(laneHtml).join('');
+    return '' +
+      '<div class="style-top">' +
+        '<div class="chips scroll-x">' +
+          chipRow(SEASONS, state.stylistSeason, 'style-season', { allLabel: 'Heel jaar' }) +
+        '</div>' +
+      '</div>' +
+      '<div class="lanes">' + banen + '</div>' +
+      buildBar();
+  }
+
+  function laneHtml(lane) {
+    var list = laneItems(lane);
+    var gekozen = state.stylist[lane.key] || '';
+
+    // Overslaan kan altijd — soms draag je geen jas. Het kruisje in de kop
+    // is daarvoor genoeg; een lege kaart vooraan zou de baan verstoppen.
+    var kop = '<div class="lane-head">' +
+      '<span class="lane-title"><i class="lane-icon">' + lane.icon + '</i>' + esc(lane.label) + '</span>' +
+      (lane.hint ? '<span class="lane-hint">' + esc(lane.hint) + '</span>' : '') +
+      '<span class="lane-count">' + laneTelling(lane, list) + '</span>' +
+      '<button type="button" class="lane-clear" data-act="lane-pick" ' +
+        'data-lane="' + lane.key + '" data-id="" aria-label="Deze laag overslaan">×</button>' +
+    '</div>';
+
+    if (!list.length) {
+      return '<section class="lane leeg" data-lane="' + lane.key + '">' + kop +
+        '<div class="lane-leeg">Niets in deze laag' +
+          (state.stylistSeason ? ' voor dit seizoen' : '') + '.' +
+          '<button type="button" class="btn btn-ghost" data-act="new-item">Toevoegen</button></div>' +
+      '</section>';
+    }
+
+    return '<section class="lane' + (gekozen ? ' gekozen' : '') + '" data-lane="' + lane.key + '">' + kop +
+      '<div class="rail" data-rail="' + lane.key + '">' +
+        list.map(function (it) { return railCard(lane, it); }).join('') +
+      '</div>' +
+    '</section>';
+  }
+
+  function laneTelling(lane, list) {
+    if (!list.length) return 'leeg';
+    var i = list.findIndex(function (it) { return it.id === state.stylist[lane.key]; });
+    return (i === -1 ? '–' : (i + 1)) + ' / ' + list.length;
+  }
+
+  function railCard(lane, it) {
+    var aan = state.stylist[lane.key] === it.id;
+    return '<button type="button" class="rail-card' + (aan ? ' selected' : '') + '" ' +
+        'data-act="lane-pick" data-lane="' + lane.key + '" data-id="' + esc(it.id) + '" ' +
+        'aria-pressed="' + (aan ? 'true' : 'false') + '">' +
+      '<span class="rail-media">' + itemThumb(it, 'rail-photo') +
+        (it.favorite ? '<span class="tile-fav">★</span>' : '') +
+        (it.rating ? '<span class="tile-rating">' + it.rating + '</span>' : '') +
+        '<i class="rail-check" aria-hidden="true">✓</i>' +
+      '</span>' +
+      '<span class="rail-name">' + esc(it.name || 'Naamloos') + '</span>' +
+    '</button>';
+  }
+
+  /* De balk onderaan telt op wat je gekozen hebt en bewaart het. */
+  function buildBar() {
+    var ids = stylistIds();
+    var namen = ids.map(function (id) { return (getItem(id) || {}).name || 'Naamloos'; });
+    return '<div class="build-bar' + (ids.length ? ' vol' : '') + '">' +
+      '<div class="build-sum">' +
+        '<b id="buildCount">' + plural(ids.length, 'stuk', 'stukken') + '</b>' +
+        '<span id="buildNames" class="build-names">' +
+          (namen.length ? esc(namen.join(' · ')) : 'Blader door de lagen hierboven') + '</span>' +
+      '</div>' +
+      '<button type="button" class="btn btn-primary" data-act="style-save">Bewaren</button>' +
+    '</div>';
+  }
+
+  /* Alleen de balk bijwerken; opnieuw tekenen zou alle banen terugspoelen. */
+  function verversBuildBar() {
+    var bar = document.querySelector('.build-bar');
+    if (!bar) return;
+    var ids = stylistIds();
+    var namen = ids.map(function (id) { return (getItem(id) || {}).name || 'Naamloos'; });
+    bar.classList.toggle('vol', !!ids.length);
+    var telling = document.getElementById('buildCount');
+    var lijst = document.getElementById('buildNames');
+    if (telling) telling.textContent = plural(ids.length, 'stuk', 'stukken');
+    if (lijst) lijst.textContent = namen.length ? namen.join(' · ') : 'Blader door de lagen hierboven';
+  }
+
+  /* De teller in de kop van een baan (3 / 12) loopt mee met de keuze. */
+  function verversLaneKop(laneKey) {
+    var lane = STYLE_LANES.filter(function (l) { return l.key === laneKey; })[0];
+    var sectie = document.querySelector('.lane[data-lane="' + laneKey + '"]');
+    if (!lane || !sectie) return;
+    sectie.classList.toggle('gekozen', !!state.stylist[laneKey]);
+    var teller = sectie.querySelector('.lane-count');
+    if (teller) teller.textContent = laneTelling(lane, laneItems(lane));
+  }
+
+  function kiesInBaan(laneKey, id, schuif) {
+    state.stylist[laneKey] = id || null;
+    var rail = document.querySelector('.rail[data-rail="' + laneKey + '"]');
+    if (rail) {
+      Array.prototype.forEach.call(rail.querySelectorAll('.rail-card'), function (k) {
+        var aan = (k.getAttribute('data-id') || '') === (id || '');
+        k.classList.toggle('selected', aan);
+        if (k.hasAttribute('aria-pressed')) k.setAttribute('aria-pressed', aan ? 'true' : 'false');
+        if (aan && schuif) schuifNaarMidden(rail, k, true);
+      });
+    }
+    verversLaneKop(laneKey);
+    verversBuildBar();
+  }
+
+  /* Een kaart in het midden van zijn baan zetten. */
+  function schuifNaarMidden(rail, kaart, zacht) {
+    if (!rail || !kaart) return;
+    var doel = kaart.offsetLeft - (rail.clientWidth - kaart.offsetWidth) / 2;
+    doel = Math.max(0, Math.min(doel, rail.scrollWidth - rail.clientWidth));
+    if (zacht && !prefersReduced() && rail.scrollTo) rail.scrollTo({ left: doel, behavior: 'smooth' });
+    else rail.scrollLeft = doel;
+  }
+
+  /* Na het tekenen staat elke baan meteen op het gekozen stuk. */
+  function centreerBanen() {
+    Array.prototype.forEach.call(document.querySelectorAll('.rail'), function (rail) {
+      var kaart = rail.querySelector('.rail-card.selected');
+      if (kaart && kaart.getAttribute('data-id')) schuifNaarMidden(rail, kaart, false);
+    });
+  }
+
+  /* Verrassing: elke baan draait naar een willekeurig stuk, de een na de
+     ander, zodat je het echt ziet gebeuren. */
+  function shuffleStylist() {
+    var iets = false;
+    STYLE_LANES.forEach(function (lane, n) {
+      var list = laneItems(lane);
+      if (!list.length) return;
+      // Van de bijzaken mag er eens eentje wegblijven.
+      if (lane.extra && Math.random() < 0.4) {
+        setTimeout(function () { kiesInBaan(lane.key, '', true); }, n * 160);
+        return;
+      }
+      var keus = list[Math.floor(Math.random() * list.length)];
+      iets = true;
+      setTimeout(function () { kiesInBaan(lane.key, keus.id, true); }, n * 160);
+    });
+    if (!iets) toast('Te weinig kleding in je kast voor een voorstel');
+  }
+
+  /* Wat je hier samenstelt gaat als concept naar het gewone outfitformulier,
+     zodat naam, gelegenheid en seizoen op één plek geregeld blijven. */
+  function bewaarStylistOutfit() {
+    var ids = stylistIds();
+    if (ids.length < 2) {
+      toast('Kies minstens twee lagen');
+      return;
+    }
+    var concept = newOutfit('ik');
+    concept.itemIds = ids;
+    if (state.stylistSeason) concept.seasons = [state.stylistSeason];
+    state.draft = { kind: 'outfit', id: 'new', data: concept };
+    go('#/outfit/new');
   }
 
   /* ─────────────────────────────────  Mappen ─────────────────────────────── */
@@ -3125,6 +3347,20 @@
       else if (kind === 'folder') go(id ? '#/map/' + id : '#/mappen');
       else go(id ? '#/item/' + id : '#/kast');
     },
+
+    'lane-pick': function (btn) {
+      var lane = btn.getAttribute('data-lane');
+      var id = btn.getAttribute('data-id') || '';
+      // Nog eens op hetzelfde tikken haalt de keuze weer weg.
+      if (id && state.stylist[lane] === id) id = '';
+      kiesInBaan(lane, id, true);
+    },
+    'style-season': function (btn) {
+      state.stylistSeason = btn.getAttribute('data-val') || '';
+      render();
+    },
+    'style-shuffle': function () { shuffleStylist(); },
+    'style-save': function () { bewaarStylistOutfit(); },
 
     'open-picker': function () { openPicker(); },
     'assign-folders': function (btn) { openFolderAssign(btn.getAttribute('data-id')); },

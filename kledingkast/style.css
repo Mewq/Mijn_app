@@ -112,13 +112,17 @@ input, textarea, select { font: inherit; }
 
 /* ───────────────────────────── Raamwerk ───────────────────────────── */
 
+/* Een heel zachte lichtval van bovenaf geeft het papier diepte, zonder dat
+   je er een verloop in herkent. */
 .app {
   display: flex;
   flex-direction: column;
   height: 100dvh;
   max-width: 560px;
   margin: 0 auto;
-  background: var(--bg);
+  background:
+    radial-gradient(120% 62% at 50% -12%, color-mix(in srgb, var(--surface) 85%, transparent), transparent 70%),
+    var(--bg);
   position: relative;
 }
 
@@ -161,7 +165,8 @@ input, textarea, select { font: inherit; }
 .tabbar {
   display: flex;
   border-top: 1px solid var(--line);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -173,10 +178,11 @@ input, textarea, select { font: inherit; }
   gap: 2px;
   padding: 8px 0 10px;
   color: var(--ink-faint);
-  font-size: 11px;
+  font-size: 10.5px;
+  letter-spacing: .005em;
 }
 
-.tab.active { color: var(--accent); }
+.tab.active { color: var(--accent); font-weight: 600; }
 .tab-icon { font-size: 19px; line-height: 1; }
 
 /* ────────────────────────────── Knoppen ───────────────────────────── */
@@ -231,7 +237,31 @@ input, textarea, select { font: inherit; }
 }
 
 .btn:active { transform: scale(.985); }
-.btn-primary { background: var(--accent); color: var(--on-accent); }
+
+/* Een hoofdknop krijgt een nauwelijks zichtbaar verloop en een schaduw in
+   zijn eigen kleur: dat leest als een knop die omhoog staat. */
+.btn-primary {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--accent) 92%, #fff), var(--accent));
+  color: var(--on-accent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent),
+              0 6px 16px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* Op een donkere achtergrond wordt diezelfde schaduw een halo; daar mag hij
+   een stuk zwakker. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .5),
+                0 6px 16px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+
+:root[data-theme="dark"] .btn-primary {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .5),
+              0 6px 16px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .btn-secondary { border-color: var(--line); background: var(--surface); }
 .btn-ghost { color: var(--accent); }
 .btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
@@ -304,7 +334,8 @@ input, textarea, select { font: inherit; }
 
 .chip.active {
   background: var(--accent-soft);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--accent);
   font-weight: 600;
 }
@@ -847,6 +878,238 @@ input, textarea, select { font: inherit; }
 
 .toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
+/* ─────────────────────────────── Stylist ───────────────────────────────
+   Banen boven elkaar; per baan blader je zijwaarts door één laag van je
+   kast. Wat je aantikt blijft staan, en onderaan telt de balk het op. */
+
+.style-top {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 7px 0 6px;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Compacte chips: hier is de hoogte kostbaar, want er moeten drie banen
+   tegelijk in beeld passen. */
+.style-top .chips { margin-top: 0; padding: 0 14px; }
+.style-top .chip { padding: 4px 11px; font-size: 12.5px; }
+
+.lanes {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 8px;
+}
+
+.lane { padding: 9px 0 6px; }
+.lane + .lane { border-top: 1px solid var(--line-soft); }
+
+.lane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 6px;
+}
+
+.lane-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  flex: none;
+}
+
+.lane-icon {
+  font-style: normal;
+  font-size: 13px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+}
+
+.lane-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lane-count {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  background: var(--surface-2);
+  border-radius: 100px;
+  padding: 2px 8px;
+}
+
+/* Het kruisje slaat de laag over. Het verschijnt pas als er iets te
+   wissen valt, zodat de kop rustig blijft. */
+.lane-clear {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin: -4px -4px -4px 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+}
+
+.lane.gekozen .lane-clear { display: block; }
+.lane-clear:active { background: var(--line); }
+
+/* De baan zelf: zijwaarts schuiven met een klik-stop per kaart. */
+.rail {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 3px 14px 4px;
+}
+
+.rail::-webkit-scrollbar { display: none; }
+
+.rail-card {
+  flex: 0 0 auto;
+  width: 98px;
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transform: scale(.96);
+  transform-origin: 50% 40%;
+  transition: opacity .3s var(--veer), transform .3s var(--veer), color .2s ease;
+}
+
+/* Pas als er in deze laag iets gekozen is, treedt de rest terug. Een baan
+   waar je nog niets koos moet er juist uitnodigend uitzien. */
+.lane.gekozen .rail-card:not(.selected) { opacity: .5; }
+.rail-card.selected { transform: scale(1); }
+.rail-card.selected .rail-name { color: var(--accent); }
+
+.rail-media { position: relative; display: block; }
+
+.rail-photo {
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  transition: box-shadow .3s var(--veer), outline-color .2s ease;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.rail-card.selected .rail-photo {
+  outline-color: var(--accent);
+  box-shadow: var(--shadow-lift);
+}
+
+/* Vinkje dat opduikt zodra de kaart gekozen is. */
+.rail-check {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-style: normal;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .28);
+  transform: scale(0);
+  transition: transform .28s var(--veer);
+}
+
+.rail-card.selected .rail-check { transform: scale(1); }
+
+.rail-name {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ster en cijfer blijven waar ze op een tegel ook staan, alleen kleiner —
+   het vinkje zit rechtsonder, dus ze botsen niet. */
+.rail-card .tile-fav { top: 4px; right: 6px; font-size: 14px; }
+.rail-card .tile-rating { bottom: 5px; left: 5px; min-width: 21px; height: 21px; font-size: 11px; }
+
+.lane-leeg {
+  margin: 0 14px;
+  padding: 11px 13px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lane-leeg .btn { min-height: 30px; padding: 0 8px; font-size: 13px; }
+
+/* De balk onderaan blijft staan terwijl je bladert. */
+.build-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 10px 10px;
+  padding: 10px 10px 10px 15px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: var(--shadow-lift);
+}
+
+.build-sum { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.build-sum b { font-size: 14px; }
+
+.build-names {
+  font-size: 12px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-bar .btn-primary { min-height: 40px; padding: 0 16px; }
+.build-bar:not(.vol) .btn-primary { opacity: .45; }
+
 /* ────────────────── Segmentkiezer: outfits versus mappen ──────────────── */
 
 .segment {
@@ -1270,6 +1533,16 @@ input, textarea, select { font: inherit; }
   .overlay { align-items: center; }
   .askim-card { max-width: 520px; }
   .toast { bottom: 28px; }
+
+  /* Stylist op een breed scherm: ruimere banen en grotere kaarten, maar
+     dezelfde HTML. De balk onderaan blijft binnen de kolom hangen. */
+  .style-top { padding: 12px 0 10px; }
+  .style-top .chips { padding: 0 24px; }
+  .lane-head { padding: 0 24px 8px; }
+  .rail { padding: 4px 24px 6px; gap: 12px; }
+  .rail-card { width: 132px; }
+  .lane-leeg { margin: 0 24px; }
+  .build-bar { margin: 0 24px 16px; max-width: 640px; }
 }
 
 @media (min-width: 1180px) {
@@ -1516,12 +1789,27 @@ input, textarea, select { font: inherit; }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-.view.enter-in > *:not(.toolbar):not(.grid) { animation: viewIn .42s var(--veer) both; }
-.view.enter-vooruit > *:not(.toolbar):not(.grid) { animation: viewVooruit .42s var(--veer) both; }
-.view.enter-terug > *:not(.toolbar):not(.grid) { animation: viewTerug .42s var(--veer) both; }
+.view.enter-in > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewIn .42s var(--veer) both; }
+.view.enter-vooruit > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewVooruit .42s var(--veer) both; }
+.view.enter-terug > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewTerug .42s var(--veer) both; }
 
-/* De zoekbalk plakt bovenaan; die schuiven zou de stickiness onderbreken. */
-.view[class*="enter-"] > .toolbar { animation: fadeIn .26s ease both; }
+/* De zoekbalk plakt bovenaan; die schuiven zou de stickiness onderbreken.
+   Een transform op een plakkend element haalt het namelijk los. */
+.view[class*="enter-"] > .toolbar,
+.view[class*="enter-"] > .style-top { animation: fadeIn .26s ease both; }
+
+/* De banen van de stylist komen één voor één van rechts binnenrollen. */
+@keyframes baanIn {
+  from { opacity: 0; transform: translateX(46px); }
+  to { opacity: 1; transform: none; }
+}
+
+.view[class*="enter-"] .lane { animation: baanIn .5s var(--veer) both; }
+.view[class*="enter-"] .lane:nth-child(1) { animation-delay: .04s; }
+.view[class*="enter-"] .lane:nth-child(2) { animation-delay: .11s; }
+.view[class*="enter-"] .lane:nth-child(3) { animation-delay: .18s; }
+.view[class*="enter-"] .lane:nth-child(4) { animation-delay: .25s; }
+.view[class*="enter-"] .lane:nth-child(n+5) { animation-delay: .32s; }
 
 /* Tegels komen na elkaar op in plaats van als één blok. */
 @keyframes tileIn {
@@ -1562,7 +1850,8 @@ input, textarea, select { font: inherit; }
   position: absolute;
   top: 0;
   left: 0;
-  width: 25%;
+  /* Precies één tabblad breed; --tab-n komt uit de tabbalk zelf. */
+  width: calc(100% / var(--tab-n, 4));
   height: 3px;
   border-radius: 0 0 3px 3px;
   background: var(--accent);
@@ -1784,7 +2073,13 @@ input, textarea, select { font: inherit; }
   .btn-secondary:hover { border-color: var(--ink-faint); }
   .rate-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
   .icon-btn:hover { background: var(--surface-2); }
+  .rail-card:hover { opacity: 1; }
+  .rail-card:hover:not(.selected) .rail-photo { box-shadow: var(--shadow-lift); }
 }
+
+/* Een aangetikte kaart drukt even in. */
+.rail-card:active { transform: scale(.9); }
+.rail-card.selected:active { transform: scale(.97); }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
