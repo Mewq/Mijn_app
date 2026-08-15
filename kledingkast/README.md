@@ -209,6 +209,26 @@ Er zijn een paar dingen die je écht ziet bewegen:
 - In de stylist rollen de **banen** één voor één van rechts binnen, en 🎲 laat ze
   na elkaar naar hun nieuwe stuk draaien.
 
+En vijf dingen die niet ná je tik gebeuren maar ermee mee:
+
+- **De foto vliegt mee.** Tik je een kledingstuk of outfit aan, dan blijft die
+  foto in beeld en groeit hij uit naar zijn plek op het detailscherm. Zolang hij
+  onderweg is blijft de rest stil: het scherm schuift niet ook nog, want dan zijn
+  het twee bewegingen in plaats van één. Kom je op een detailscherm zonder zo'n
+  vlucht — na herladen bijvoorbeeld — dan zoomt de foto er gewoon in.
+- **De banen van de stylist draaien mee met je vinger.** Elke kaart weet hoe ver
+  hij van het midden staat en draait naar rato van je af, zodat wat in het midden
+  ligt vooraan komt. Past een baan al helemaal in beeld, dan blijft alles recht:
+  daar valt niets te bladeren, dus daar is ook geen midden.
+- **Cijfers rollen door.** Een teller die van 2 naar 3 springt zie je niet; het
+  oude cijfer rolt omhoog weg terwijl het nieuwe van onderen komt. Dat geldt voor
+  de tellers van de stylist en van de kledingkiezer.
+- **Een rimpel loopt weg vanaf je vinger** op knoppen, chips, tegels en rijen.
+- **Sterren spatten weg** als je iets tot favoriet maakt — alleen bij aanzetten,
+  want uitzetten is geen feest.
+- **Bewaren in de stylist** laat de gekozen stukken eerst één voor één op een
+  stapel vliegen, en pas daarna gaat het formulier open.
+
 Verder beweegt:
 
 - De **foto op een detailscherm** komt met een zoom naar voren.
@@ -234,9 +254,19 @@ Een paar dingen om te weten als je hieraan sleutelt:
   keer een nieuw element en schoof het nergens heen. Keerzijde: elementen die
   blijven bestaan houden hun animatieklasse vast, dus die moet er na afloop met
   een `setTimeout` weer af — anders wipt het icoon de tweede keer niet meer.
-- De snippers en de vlieger hangen aan `document.body`, buiten het scherm dat
-  ververst wordt, zodat een tekenbeurt ze niet halverwege weghaalt. Ze ruimen
-  zichzelf op.
+- De snippers, de vlieger, de rimpel en de sterren hangen aan `document.body`,
+  buiten het scherm dat ververst wordt, zodat een tekenbeurt ze niet halverwege
+  weghaalt. Ze ruimen zichzelf op. Dit is niet theoretisch: de rimpel zat eerst
+  ín de knop, en omdat bijna elke knop het scherm opnieuw tekent, gooide hij
+  zijn eigen rimpel meteen weer weg.
+- De meevliegende foto meet waar hij heen moet. Dat kan alleen als het doel
+  stilstaat, dus `.met-vlucht` zet de opkomst van het scherm en de zoom van de
+  detailfoto zolang uit. Zonder dat meet je het eerste beeldje van die
+  animaties — een positie die 54 px verderop ligt — en landt de foto ernaast.
+- Het oude cijfer van een rollende teller staat in `data-oud` en wordt met
+  `content: attr()` getekend. Als echt element zou het tijdens het rollen in de
+  tekst van de teller staan, en dan lezen zowel een schermlezer als een test
+  "32" waar 3 hoort te staan.
 
 Alles hierboven verdwijnt zodra het systeem om minder beweging vraagt.
 

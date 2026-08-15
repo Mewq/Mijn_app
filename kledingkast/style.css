@@ -2077,9 +2077,136 @@ input, textarea, select { font: inherit; }
   .rail-card:hover:not(.selected) .rail-photo { box-shadow: var(--shadow-lift); }
 }
 
-/* Een aangetikte kaart drukt even in. */
-.rail-card:active { transform: scale(.9); }
-.rail-card.selected:active { transform: scale(.97); }
+/* ══════════════════ Beweging die met je mee gebeurt ══════════════════════
+   Vijf dingen die reageren op wat je doet, in plaats van erna te spelen. */
+
+/* — 1. De foto vliegt van de tegel naar het detailscherm — */
+.vlucht {
+  position: fixed;
+  z-index: 44;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: var(--shadow-lift);
+  transform-origin: 0 0;
+  transition: transform .42s var(--veer), border-radius .42s var(--veer);
+}
+
+.vlucht > * { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
+.vlucht .ph-img { opacity: 1; }
+
+/* Zolang er een foto onderweg is, blijft de rest stil: één beweging leest
+   rustiger dan een schuivend scherm met een vliegende foto erover. Alleen
+   opdoemen dus, geen transform — anders staat het doel niet stil terwijl we
+   meten waar de foto heen moet.
+   De opsomming van :not() is er om de opkomstregel hierboven te overstemmen;
+   zonder evenveel klassen wint die van deze. */
+.view.met-vlucht > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes),
+.view.met-vlucht .detail-photo { animation: fadeIn .34s ease .06s both; }
+
+/* — 2. De banen van de stylist draaien mee met je vinger —
+   --sx is hoe ver een kaart links (-1) of rechts (1) van het midden staat,
+   --d hetzelfde maar zonder richting. Geen overgang: dit loopt met de
+   scroll mee, en een overgang zou er juist achteraan hobbelen. */
+.rail-card {
+  transform:
+    perspective(760px)
+    rotateY(calc(var(--sx, 0) * -17deg))
+    scale(calc(1 - .13 * var(--d, 0)))
+    translateY(calc(var(--d, 0) * 7px));
+  transition: opacity .3s var(--veer), color .2s ease;
+}
+
+.rail-card.selected { transform:
+    perspective(760px)
+    rotateY(calc(var(--sx, 0) * -17deg))
+    scale(calc(1.02 - .13 * var(--d, 0))); }
+
+.rail-card:active { filter: brightness(.94); }
+
+/* — 3. Cijfers rollen door in plaats van te springen — */
+@keyframes rolIn {
+  from { opacity: 0; transform: translateY(90%); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rolWeg {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-90%); }
+}
+
+.rolt { position: relative; display: inline-block; }
+
+/* Het oude cijfer staat in een attribuut en wordt hier getekend, zodat het
+   niet in de tekst van de teller terechtkomt. */
+.rolt[data-oud]::after {
+  content: attr(data-oud);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  white-space: nowrap;
+  text-align: inherit;
+  animation: rolWeg .38s var(--veer) both;
+}
+
+.rol-in { animation: rolIn .38s var(--veer) both; }
+
+/* — 4. Een rimpel loopt weg vanaf je vinger —
+   Het laagje neemt de vorm van de knop over en klipt de cirkel, zodat de
+   rimpel netjes binnen de ronde hoeken blijft. */
+@keyframes rimpelUit {
+  from { transform: scale(0); opacity: .32; }
+  to { transform: scale(1); opacity: 0; }
+}
+
+.rimpel-laag {
+  position: fixed;
+  z-index: 41;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rimpel-laag i {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  animation: rimpelUit .6s cubic-bezier(.22, .61, .36, 1) both;
+}
+
+/* — 5. Sterren spatten weg als je iets tot favoriet maakt — */
+@keyframes sterUit {
+  0% { transform: translate(0, 0) scale(.2) rotate(0deg); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(140deg); opacity: 0; }
+}
+
+.sterren { position: fixed; z-index: 42; pointer-events: none; }
+
+.sterren i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-style: normal;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  animation: sterUit .9s cubic-bezier(.2, .7, .3, 1) both;
+}
+
+/* — De gekozen stukken vliegen op een stapel bij het bewaren — */
+.bundel {
+  position: fixed;
+  z-index: 46;
+  overflow: hidden;
+  border-radius: 14px;
+  pointer-events: none;
+  box-shadow: var(--shadow-lift);
+  transition: transform .62s var(--veer), opacity .62s ease;
+}
+
+.bundel > * { width: 100%; height: 100%; }
+.bundel .ph-img { opacity: 1; }
+.bundel .rail-check, .bundel .tile-fav, .bundel .tile-rating { display: none; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 

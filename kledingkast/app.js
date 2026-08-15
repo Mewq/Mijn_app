@@ -285,6 +285,146 @@
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
+  /* ─────────────── De foto vliegt mee naar het detailscherm ────────────────
+     Tik je een tegel aan, dan blijft diezelfde foto in beeld en groeit hij uit
+     naar zijn plek op het detailscherm. Dat leest als één beweging in plaats
+     van twee losse schermen. */
+
+  var vlucht = null;   // wat er onderweg is: { rect, html, radius }
+
+  function onthoudVlucht(ev) {
+    if (prefersReduced() || !ev.target.closest) return;
+    var link = ev.target.closest('a.tile, a.outfit-card');
+    if (!link) return;
+    var bron = link.querySelector('.tile-photo, .collage');
+    if (!bron) return;
+    var r = bron.getBoundingClientRect();
+    if (!r.width) return;
+    vlucht = { rect: r, html: bron.outerHTML, radius: getComputedStyle(bron).borderRadius };
+  }
+
+  /* Meten kan alleen als het doel stilstaat. Daarom zet .met-vlucht de
+     opkomst van het scherm en de zoom van de foto even uit; anders meet je
+     de eerste beeldje van die animaties in plaats van de eindpositie. */
+  function speelVlucht() {
+    var v = vlucht;
+    vlucht = null;
+    if (!v) return;
+    var doel = els.view.querySelector('.detail-photo .photo-frame, .detail-photo .collage');
+    if (!doel) { els.view.classList.remove('met-vlucht'); return; }
+
+    var b = doel.getBoundingClientRect();
+    var kloon = document.createElement('div');
+    kloon.className = 'vlucht';
+    kloon.style.left = v.rect.left + 'px';
+    kloon.style.top = v.rect.top + 'px';
+    kloon.style.width = v.rect.width + 'px';
+    kloon.style.height = v.rect.height + 'px';
+    kloon.style.borderRadius = v.radius;
+    kloon.innerHTML = v.html;
+    document.body.appendChild(kloon);
+    doel.style.visibility = 'hidden';
+
+    requestAnimationFrame(function () {
+      kloon.style.transform = 'translate(' + (b.left - v.rect.left) + 'px,' + (b.top - v.rect.top) + 'px) ' +
+        'scale(' + (b.width / v.rect.width) + ',' + (b.height / v.rect.height) + ')';
+      kloon.style.borderRadius = getComputedStyle(doel).borderRadius;
+    });
+
+    setTimeout(function () {
+      kloon.remove();
+      doel.style.visibility = '';
+      els.view.classList.remove('met-vlucht');
+    }, 430);
+  }
+
+  /* ───────────────────────── Cijfers die doorrollen ────────────────────────
+     Een teller die van 2 naar 3 springt zie je niet; eentje die omhoog rolt
+     wel. Het oude cijfer schuift weg, het nieuwe komt van onderen. */
+
+  function rolNaar(el, tekst) {
+    if (!el) return;
+    tekst = String(tekst);
+    // De vorige waarde staat in het attribuut, niet in de tekst: tijdens het
+    // rollen hangt het oude cijfer er nog even bij en dan klopt textContent niet.
+    var vorige = el.getAttribute('data-waarde');
+    if (vorige === tekst) return;
+    el.setAttribute('data-waarde', tekst);
+    if (vorige === null || prefersReduced()) { el.textContent = tekst; return; }
+
+    el.textContent = tekst;
+    // Het oude cijfer komt uit een ::after met attr(). Zou het een echt
+    // element zijn, dan stond het tijdens het rollen in de tekst van de
+    // teller — en dan leest zowel een schermlezer als een test "32".
+    el.setAttribute('data-oud', vorige);
+    el.classList.add('rolt');
+    el.classList.remove('rol-in');
+    void el.offsetWidth;
+    el.classList.add('rol-in');
+    setTimeout(function () {
+      el.removeAttribute('data-oud');
+      el.classList.remove('rol-in');
+    }, 420);
+  }
+
+  /* ───────────────────────────── Rimpel bij een tik ──────────────────────── */
+
+  var RIMPEL_OP = '.btn, .chip, .rate-btn, .segment-btn, .tab, .day-row, .pack-row, ' +
+    '.assign-row, .list-item, .tile, .outfit-card, .rail-card, .icon-btn';
+
+  /* De rimpel hangt aan de body, niet in de knop zelf. De meeste knoppen
+     tekenen het scherm opnieuw en zouden hun eigen rimpel dus meteen weer
+     weggooien; een los laagje op dezelfde plek overleeft dat. */
+  function rimpel(ev) {
+    if (prefersReduced() || !ev.target.closest) return;
+    var el = ev.target.closest(RIMPEL_OP);
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var stijl = getComputedStyle(el);
+    var laag = document.createElement('div');
+    laag.className = 'rimpel-laag';
+    laag.style.left = r.left + 'px';
+    laag.style.top = r.top + 'px';
+    laag.style.width = r.width + 'px';
+    laag.style.height = r.height + 'px';
+    laag.style.borderRadius = stijl.borderRadius;
+    laag.style.color = stijl.color;
+
+    var groot = Math.max(r.width, r.height) * 2.4;
+    var i = document.createElement('i');
+    i.style.width = i.style.height = groot + 'px';
+    i.style.left = (ev.clientX - r.left - groot / 2) + 'px';
+    i.style.top = (ev.clientY - r.top - groot / 2) + 'px';
+    laag.appendChild(i);
+    document.body.appendChild(laag);
+    setTimeout(function () { laag.remove(); }, 640);
+  }
+
+  /* ──────────────────────── Sterren bij een favoriet ─────────────────────── */
+
+  function sterrenBui(el) {
+    if (!el || prefersReduced()) return;
+    var r = el.getBoundingClientRect();
+    var laag = document.createElement('div');
+    laag.className = 'sterren';
+    laag.style.left = Math.round(r.left + r.width / 2) + 'px';
+    laag.style.top = Math.round(r.top + r.height / 2) + 'px';
+    for (var n = 0; n < 12; n++) {
+      var ster = document.createElement('i');
+      var hoek = (n / 12) * Math.PI * 2 + Math.random() * 0.4;
+      var ver = 46 + Math.random() * 46;
+      ster.textContent = '★';
+      ster.style.setProperty('--dx', Math.round(Math.cos(hoek) * ver) + 'px');
+      ster.style.setProperty('--dy', Math.round(Math.sin(hoek) * ver) + 'px');
+      ster.style.animationDelay = Math.round(Math.random() * 90) + 'ms';
+      ster.style.fontSize = (10 + Math.random() * 9).toFixed(0) + 'px';
+      laag.appendChild(ster);
+    }
+    document.body.appendChild(laag);
+    setTimeout(function () { laag.remove(); }, 1100);
+  }
+
   function wacht(ms) {
     return new Promise(function (r) { setTimeout(r, ms); });
   }
@@ -1206,6 +1346,9 @@
     els.topbar.innerHTML = top;
     els.view.innerHTML = view;
     els.view.setAttribute('data-route', parts[0]);
+    // Vliegt er een foto mee naar dit scherm, dan mag de rest niet ook nog
+    // gaan schuiven: dan zijn het weer twee bewegingen in plaats van één.
+    els.view.classList.toggle('met-vlucht', !!vlucht);
     var tabNu = rootTab(parts);
     zetActieveTab(tabNu);
 
@@ -1244,6 +1387,7 @@
     // Elke baan begint op het stuk dat al gekozen was, anders sta je na een
     // tekenbeurt weer helemaal links terwijl je keuze verderop staat.
     if (parts[0] === 'stylist') centreerBanen();
+    speelVlucht();
   }
 
   function topBar(title, backHref, actions) {
@@ -2136,7 +2280,8 @@
     var kop = '<div class="lane-head">' +
       '<span class="lane-title"><i class="lane-icon">' + lane.icon + '</i>' + esc(lane.label) + '</span>' +
       (lane.hint ? '<span class="lane-hint">' + esc(lane.hint) + '</span>' : '') +
-      '<span class="lane-count">' + laneTelling(lane, list) + '</span>' +
+      '<span class="lane-count" data-waarde="' + esc(laneTelling(lane, list)) + '">' +
+        laneTelling(lane, list) + '</span>' +
       '<button type="button" class="lane-clear" data-act="lane-pick" ' +
         'data-lane="' + lane.key + '" data-id="" aria-label="Deze laag overslaan">×</button>' +
     '</div>';
@@ -2182,7 +2327,8 @@
     var namen = ids.map(function (id) { return (getItem(id) || {}).name || 'Naamloos'; });
     return '<div class="build-bar' + (ids.length ? ' vol' : '') + '">' +
       '<div class="build-sum">' +
-        '<b id="buildCount">' + plural(ids.length, 'stuk', 'stukken') + '</b>' +
+        '<b id="buildCount" data-waarde="' + esc(plural(ids.length, 'stuk', 'stukken')) + '">' +
+          plural(ids.length, 'stuk', 'stukken') + '</b>' +
         '<span id="buildNames" class="build-names">' +
           (namen.length ? esc(namen.join(' · ')) : 'Blader door de lagen hierboven') + '</span>' +
       '</div>' +
@@ -2197,9 +2343,8 @@
     var ids = stylistIds();
     var namen = ids.map(function (id) { return (getItem(id) || {}).name || 'Naamloos'; });
     bar.classList.toggle('vol', !!ids.length);
-    var telling = document.getElementById('buildCount');
+    rolNaar(document.getElementById('buildCount'), plural(ids.length, 'stuk', 'stukken'));
     var lijst = document.getElementById('buildNames');
-    if (telling) telling.textContent = plural(ids.length, 'stuk', 'stukken');
     if (lijst) lijst.textContent = namen.length ? namen.join(' · ') : 'Blader door de lagen hierboven';
   }
 
@@ -2209,8 +2354,7 @@
     var sectie = document.querySelector('.lane[data-lane="' + laneKey + '"]');
     if (!lane || !sectie) return;
     sectie.classList.toggle('gekozen', !!state.stylist[laneKey]);
-    var teller = sectie.querySelector('.lane-count');
-    if (teller) teller.textContent = laneTelling(lane, laneItems(lane));
+    rolNaar(sectie.querySelector('.lane-count'), laneTelling(lane, laneItems(lane)));
   }
 
   function kiesInBaan(laneKey, id, schuif) {
@@ -2242,7 +2386,76 @@
     Array.prototype.forEach.call(document.querySelectorAll('.rail'), function (rail) {
       var kaart = rail.querySelector('.rail-card.selected');
       if (kaart && kaart.getAttribute('data-id')) schuifNaarMidden(rail, kaart, false);
+      volgBaan(rail);
     });
+  }
+
+  /* ──────────────────── De baan draait mee terwijl je bladert ──────────────
+     Elke kaart weet hoe ver hij van het midden af staat. Daarmee draait hij
+     weg van je en wordt hij kleiner, zodat het midden vooraan komt te liggen.
+     Dit loopt met de vinger mee, dus zonder overgang: die zou achterlopen. */
+
+  function meetBaan(rail) {
+    var kaarten = rail.querySelectorAll('.rail-card');
+    // Past alles al in beeld, dan valt er niets te bladeren en heeft "het
+    // midden" geen betekenis. Alles recht dus — anders staat een baan met
+    // twee stukken scheef zonder dat je iets gedaan hebt.
+    var schuift = rail.scrollWidth > rail.clientWidth + 4;
+    var mid = rail.scrollLeft + rail.clientWidth / 2;
+    var bereik = (rail.clientWidth / 2) || 1;
+    Array.prototype.forEach.call(kaarten, function (k) {
+      var afstand = 0;
+      if (schuift) {
+        afstand = (k.offsetLeft + k.offsetWidth / 2 - mid) / bereik;
+        afstand = Math.max(-1.5, Math.min(1.5, afstand));
+      }
+      k.style.setProperty('--sx', afstand.toFixed(3));
+      k.style.setProperty('--d', Math.min(1, Math.abs(afstand)).toFixed(3));
+    });
+  }
+
+  function volgBaan(rail) {
+    if (prefersReduced()) return;
+    meetBaan(rail);
+    if (rail.getAttribute('data-volgt')) return;
+    rail.setAttribute('data-volgt', '1');
+    var wacht = false;
+    rail.addEventListener('scroll', function () {
+      if (wacht) return;
+      wacht = true;
+      requestAnimationFrame(function () { wacht = false; meetBaan(rail); });
+    }, { passive: true });
+  }
+
+  /* Bij het bewaren vliegen de gekozen stukken op een stapel: even zien wat
+     je gemaakt hebt voordat het formulier opengaat. */
+  function bundelStukken(dan) {
+    var kaarten = document.querySelectorAll('.rail-card.selected .rail-media');
+    var knop = document.querySelector('[data-act="style-save"]');
+    if (!kaarten.length || !knop || prefersReduced()) { dan(); return; }
+    var doel = knop.getBoundingClientRect();
+    Array.prototype.forEach.call(kaarten, function (bron, n) {
+      var a = bron.getBoundingClientRect();
+      var kloon = document.createElement('div');
+      kloon.className = 'bundel';
+      kloon.style.left = a.left + 'px';
+      kloon.style.top = a.top + 'px';
+      kloon.style.width = a.width + 'px';
+      kloon.style.height = a.height + 'px';
+      kloon.style.zIndex = 46 + n;
+      kloon.innerHTML = bron.innerHTML;
+      document.body.appendChild(kloon);
+      requestAnimationFrame(function () {
+        kloon.style.transitionDelay = (n * 55) + 'ms';
+        kloon.style.transform = 'translate(' +
+          Math.round(doel.left + doel.width / 2 - a.left - a.width / 2) + 'px,' +
+          Math.round(doel.top + doel.height / 2 - a.top - a.height / 2) + 'px) ' +
+          'rotate(' + ((n - kaarten.length / 2) * 7).toFixed(1) + 'deg) scale(.16)';
+        kloon.style.opacity = '0';
+      });
+      setTimeout(function () { kloon.remove(); }, 900 + n * 55);
+    });
+    setTimeout(dan, 240 + kaarten.length * 55);
   }
 
   /* Verrassing: elke baan draait naar een willekeurig stuk, de een na de
@@ -2275,8 +2488,10 @@
     var concept = newOutfit('ik');
     concept.itemIds = ids;
     if (state.stylistSeason) concept.seasons = [state.stylistSeason];
-    state.draft = { kind: 'outfit', id: 'new', data: concept };
-    go('#/outfit/new');
+    bundelStukken(function () {
+      state.draft = { kind: 'outfit', id: 'new', data: concept };
+      go('#/outfit/new');
+    });
   }
 
   /* ─────────────────────────────────  Mappen ─────────────────────────────── */
@@ -2594,7 +2809,8 @@
   function showSheet(title, body, footer) {
     var foot = footer !== undefined ? footer :
       '<button class="btn btn-primary btn-block" data-act="picker-done">' +
-        'Klaar (<span id="pickCount">' + state.pickerSel.length + '</span>)</button>';
+        'Klaar (<span id="pickCount" data-waarde="' + state.pickerSel.length + '">' +
+          state.pickerSel.length + '</span>)</button>';
     els.overlay.innerHTML = '<div class="sheet">' +
       '<div class="sheet-head"><h3>' + esc(title) + '</h3>' +
         '<button class="icon-btn" data-act="picker-close" aria-label="Sluiten">×</button></div>' +
@@ -3372,8 +3588,7 @@
       var kiezen = i === -1;
       if (kiezen) state.pickerSel.push(id); else state.pickerSel.splice(i, 1);
       btn.classList.toggle('selected');
-      var count = document.getElementById('pickCount');
-      if (count) count.textContent = state.pickerSel.length;
+      rolNaar(document.getElementById('pickCount'), state.pickerSel.length);
       // Alleen bij kiezen; bij loslaten zou een vliegend plaatje verwarren.
       if (kiezen) vliegNaarTeller(btn.querySelector('.tile-photo') || btn);
     },
@@ -3395,6 +3610,7 @@
       var it = getItem(btn.getAttribute('data-id'));
       if (!it) return;
       it.favorite = !it.favorite;
+      if (it.favorite) sterrenBui(btn);       // alleen bij aanzetten; uitzetten is geen feest
       await saveItem(it);
       render();
     },
@@ -3402,6 +3618,7 @@
       var o = getOutfit(btn.getAttribute('data-id'));
       if (!o) return;
       o.favorite = !o.favorite;
+      if (o.favorite) sterrenBui(btn);
       await saveOutfit(o);
       render();
     },
@@ -3661,6 +3878,8 @@
   }
 
   function onClick(ev) {
+    rimpel(ev);
+    onthoudVlucht(ev);
     var target = ev.target.closest('[data-act]');
     if (!target) return;
     var act = target.getAttribute('data-act');
