@@ -110,7 +110,8 @@
     outfitFilter: { q: '', occasion: '', author: '' },
     weekOffset: 0,          // 0 = deze week in de agenda
     stylist: {},            // baan -> gekozen kledingstuk-id
-    stylistSeason: ''       // filter op seizoen in de stylist
+    stylistSeason: '',      // filter op seizoen in de stylist
+    deelResultaat: null     // wat de laatst geplakte code opleverde
   };
 
   var els = {};
@@ -846,6 +847,7 @@
   function newOutfit(author) {
     return {
       id: uid('out'), name: '', itemIds: [], occasion: 'dagelijks', seasons: [],
+      imageIds: [], coverImageId: null,   // eigen foto's, bijv. een kiekje van de hele look
       notes: '', favorite: false, wearCount: 0, lastWorn: null,
       author: author || 'ik',   // 'ik' of 'askim'
       rating: null,             // cijfer van Askim, 1 t/m 10
@@ -987,8 +989,15 @@
   }
 
   async function deleteOutfit(id) {
+    // Eigen foto's van de outfit gaan mee; die hangen aan niets anders.
+    var o = getOutfit(id);
+    var beelden = (o && o.imageIds) || [];
+    for (var b = 0; b < beelden.length; b++) {
+      await KastDB.remove(KastDB.IMAGES, beelden[b]);
+      forgetImage(beelden[b]);
+    }
     await KastDB.remove(KastDB.OUTFITS, id);
-    state.outfits = state.outfits.filter(function (o) { return o.id !== id; });
+    state.outfits = state.outfits.filter(function (o2) { return o2.id !== id; });
 
     // ... en niet als dode verwijzing in een map.
     var touched = foldersOf(id);
@@ -1475,7 +1484,7 @@
       var body;
       if (shown) {
         var items = shown.itemIds.map(getItem).filter(Boolean);
-        body = collageHtml(items, 'collage day-thumb') +
+        body = outfitBeeld(shown, 'collage day-thumb') +
           '<span class="list-text"><b>' + esc(shown.name || 'Naamloze outfit') + '</b>' +
           '<span class="list-sub">' + (worn ? 'gedragen' : 'gepland') + '</span></span>';
       } else {
@@ -1520,7 +1529,7 @@
           var items = o.itemIds.map(getItem).filter(Boolean);
           return '<div class="assign-row' + (huidig && huidig.id === o.id ? ' selected' : '') + '" ' +
             'data-act="plan-pick" data-id="' + esc(o.id) + '" data-date="' + esc(date) + '">' +
-            collageHtml(items, 'collage small') +
+            outfitBeeld(o, 'collage small') +
             '<span class="list-text"><b>' + esc(o.name || 'Naamloze outfit') + '</b>' +
             '<span class="list-sub">' + plural(items.length, 'stuk', 'stukken') + '</span></span>' +
             '<span class="pick-mark">✓</span></div>';
@@ -1911,6 +1920,15 @@
     d.data.favorite = !!(fav && fav.checked);
   }
 
+  /* Het formulier dat openstaat bepaalt wat er uit het scherm gelezen wordt. */
+  function syncDraftFromDom() {
+    var d = state.draft;
+    if (!d) return;
+    if (d.kind === 'item') syncItemDraftFromDom();
+    else if (d.kind === 'outfit') syncOutfitDraftFromDom();
+    else if (d.kind === 'folder') syncFolderDraftFromDom();
+  }
+
   async function commitItem() {
     syncItemDraftFromDom();
     var d = state.draft;
@@ -2024,7 +2042,7 @@
     var occ = occasionMap[o.occasion];
     var mappen = foldersOf(o.id);
     return '<a class="outfit-card" href="#/outfit/' + esc(o.id) + '">' +
-      '<div class="tile-media">' + collageHtml(items) +
+      '<div class="tile-media">' + outfitBeeld(o) +
         (o.rating ? '<span class="tile-rating">' + o.rating + '</span>' : '') + '</div>' +
       '<div class="outfit-body">' +
         '<span class="outfit-name">' + esc(o.name || 'Naamloze outfit') +
@@ -2042,7 +2060,7 @@
   function outfitRowHtml(o) {
     var items = o.itemIds.map(getItem).filter(Boolean);
     return '<a class="list-item" href="#/outfit/' + esc(o.id) + '">' +
-      collageHtml(items, 'collage small') +
+      outfitBeeld(o, 'collage small') +
       '<span class="list-text"><b>' + esc(o.name || 'Naamloze outfit') + '</b>' +
       '<span class="list-sub">' + plural(items.length, 'stuk', 'stukken') + '</span></span>' +
       '<span class="chev">›</span></a>';
@@ -2057,6 +2075,17 @@
       cells.map(function (it) { return itemThumb(it, 'collage-cell'); }).join('') + '</div>';
   }
 
+  /* Heeft een outfit een eigen foto, dan is dat het gezicht van de outfit.
+     Anders vallen de kledingstukken terug op een collage. */
+  function outfitBeeld(o, cls) {
+    var cover = coverImageOf(o);
+    if (!cover) return collageHtml(o.itemIds.map(getItem).filter(Boolean), cls);
+    return '<div class="' + (cls || 'collage') + ' outfit-foto laadt">' +
+      '<div class="ph-fallback"><span>✨</span></div>' +
+      '<img class="ph-img" data-img="' + esc(cover) + ':thumb" alt="">' +
+    '</div>';
+  }
+
   function viewOutfitDetail(id) {
     var o = getOutfit(id);
     if (!o) return emptyState('🤔', 'Niet gevonden', 'Deze outfit bestaat niet meer.', '<a class="btn btn-primary" href="#/outfits">Naar outfits</a>');
@@ -2065,7 +2094,7 @@
     var mappen = foldersOf(o.id);
 
     return '<div class="detail">' +
-      '<div class="detail-photo">' + collageHtml(items, 'collage big') + '</div>' +
+      '<div class="detail-photo">' + outfitBeeld(o, 'collage big') + '</div>' +
       '<div class="detail-body">' +
         '<div class="detail-head">' +
           '<h2 class="detail-title">' + esc(o.name || 'Naamloze outfit') + '</h2>' +
@@ -2112,7 +2141,11 @@
                 '<span class="list-sub">' + esc(cat.label) + '</span></span>' +
                 '<span class="chev">›</span></a>';
             }).join('') + '</div>'
-          : '<p class="empty-text">Deze outfit heeft nog geen kledingstukken.</p>') +
+          : '<div class="nog-leeg">' +
+              '<p>Er zitten nog geen kledingstukken in deze outfit. Zoek ze er rustig later bij — ' +
+                'de foto en de naam blijven gewoon staan.</p>' +
+              '<a class="btn btn-primary" href="#/outfit/' + esc(o.id) + '/edit">Kleding erbij zoeken</a>' +
+            '</div>') +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/outfit/' + esc(o.id) + '/edit">Bewerken</a>' +
           '<button class="btn btn-secondary" data-act="duplicate-outfit" data-id="' + esc(o.id) + '">Dupliceren</button>' +
@@ -2121,20 +2154,68 @@
       '</div></div>';
   }
 
+  /* Eén vorm voor een outfit-in-bewerking, waar hij ook vandaan komt: uit het
+     formulier zelf of kant-en-klaar uit de stylist. Zonder deze ene plek raakt
+     het concept uit de stylist zijn fotovelden kwijt en klapt het formulier. */
+  function outfitConcept(data, id) {
+    return {
+      kind: 'outfit',
+      id: id || 'new',
+      data: data,
+      // photos: net gekozen foto's hebben een url; opgeslagen foto's komen pas
+      // uit de database als ze in beeld staan.
+      photos: (data.imageIds || []).map(function (imgId) { return { id: imgId, url: '', blobs: null }; }),
+      cover: coverImageOf(data),
+      removed: []
+    };
+  }
+
   function viewOutfitForm(id, author) {
     var existing = id ? getOutfit(id) : null;
     if (id && !existing) return emptyState('🤔', 'Niet gevonden', 'Deze outfit bestaat niet meer.', '<a class="btn btn-primary" href="#/outfits">Naar outfits</a>');
 
     if (!state.draft || state.draft.kind !== 'outfit' || state.draft.id !== (existing ? existing.id : 'new')) {
-      state.draft = {
-        kind: 'outfit', id: existing ? existing.id : 'new',
-        data: existing ? JSON.parse(JSON.stringify(existing)) : newOutfit(author)
-      };
+      state.draft = outfitConcept(existing ? JSON.parse(JSON.stringify(existing)) : newOutfit(author),
+        existing ? existing.id : 'new');
     }
-    var o = state.draft.data;
+    var d = state.draft;
+    var o = d.data;
     var chosen = o.itemIds.map(getItem).filter(Boolean);
 
+    var coverFoto = null;
+    d.photos.forEach(function (p) { if (p.id === d.cover) coverFoto = p; });
+    if (!coverFoto) coverFoto = d.photos[0] || null;
+    var coverBeeld = coverFoto
+      ? (coverFoto.url
+          ? '<img class="ph-img loaded" src="' + esc(coverFoto.url) + '" alt="">'
+          : '<img class="ph-img" data-img="' + esc(coverFoto.id) + ':full" alt="">')
+      : '';
+
+    var strip = d.photos.map(function (p) {
+      var img = p.url
+        ? '<img class="ph-img loaded" src="' + esc(p.url) + '" alt="">'
+        : '<img class="ph-img" data-img="' + esc(p.id) + ':thumb" alt="">';
+      return '<div class="photo-thumb' + (p.id === (coverFoto && coverFoto.id) ? ' is-cover' : '') + '" ' +
+        'data-act="set-cover" data-id="' + esc(p.id) + '">' + img +
+        '<span class="cover-mark">★</span>' +
+        '<button type="button" class="thumb-x" data-act="drop-photo" data-id="' + esc(p.id) + '" aria-label="Foto verwijderen">×</button>' +
+      '</div>';
+    }).join('');
+
     return '<form class="form" id="outfitForm" novalidate>' +
+      '<button type="button" class="photo-picker" data-act="pick-photo">' +
+        '<div class="photo-frame' + (coverFoto && coverFoto.url ? ' has-photo' : '') + '">' +
+          '<div class="ph-fallback"><span>📷</span></div>' + coverBeeld +
+        '</div>' +
+        '<span class="photo-hint">' + (d.photos.length ? 'Foto\'s toevoegen' : 'Foto van de hele look (optioneel)') + '</span>' +
+      '</button>' +
+
+      (d.photos.length
+        ? '<div class="photo-strip scroll-x">' + strip +
+            '<button type="button" class="photo-add" data-act="pick-photo" aria-label="Foto toevoegen">+</button>' +
+          '</div>'
+        : '') +
+
       '<div class="field"><label for="o-name">Naam</label>' +
         '<input id="o-name" class="input" type="text" value="' + esc(o.name) + '" placeholder="Bijv. maandag op kantoor" autocomplete="off"></div>' +
 
@@ -2146,7 +2227,7 @@
                 '<button type="button" class="sel-x" data-act="unpick-item" data-id="' + esc(it.id) + '" aria-label="Verwijderen">×</button>' +
               '</div>';
             }).join('') + '</div>'
-          : '<p class="hint block">Nog niets gekozen.</p>') +
+          : '<p class="hint block">Nog niets gekozen — dat mag je gerust later doen.</p>') +
         '<div class="row-actions">' +
           '<button type="button" class="btn btn-secondary" data-act="open-picker">Kleding kiezen</button>' +
           '<button type="button" class="btn btn-ghost" data-act="suggest-outfit">🎲 Verras me</button>' +
@@ -2191,13 +2272,31 @@
     }
   }
 
+  /* Een outfit mag beginnen als alleen een foto of een naam: je maakt een
+     kiekje in de paskamer en zoekt de losse stukken er later bij. Helemaal
+     leeg opslaan heeft geen zin — dan staat er straks niets in je lijst. */
   async function commitOutfit() {
     syncOutfitDraftFromDom();
-    var o = state.draft.data;
-    if (!o.itemIds.length) {
-      toast('Kies eerst minstens één kledingstuk');
+    var d = state.draft;
+    var o = d.data;
+    if (!o.itemIds.length && !d.photos.length && !o.name) {
+      toast('Geef de outfit een naam, een foto of kleding');
       return;
     }
+
+    for (var r = 0; r < d.removed.length; r++) {
+      await KastDB.remove(KastDB.IMAGES, d.removed[r]);
+      forgetImage(d.removed[r]);
+    }
+    for (var p = 0; p < d.photos.length; p++) {
+      var ph = d.photos[p];
+      if (!ph.blobs) continue;
+      await KastDB.put(KastDB.IMAGES, { id: ph.id, full: ph.blobs.full, thumb: ph.blobs.thumb });
+      forgetImage(ph.id);
+    }
+    o.imageIds = d.photos.map(function (x) { return x.id; });
+    o.coverImageId = (d.cover && o.imageIds.indexOf(d.cover) !== -1) ? d.cover : (o.imageIds[0] || null);
+
     await saveOutfit(o);
     clearDraft();
     toast('Outfit opgeslagen');
@@ -2489,7 +2588,7 @@
     concept.itemIds = ids;
     if (state.stylistSeason) concept.seasons = [state.stylistSeason];
     bundelStukken(function () {
-      state.draft = { kind: 'outfit', id: 'new', data: concept };
+      state.draft = outfitConcept(concept, 'new');
       go('#/outfit/new');
     });
   }
@@ -2591,7 +2690,7 @@
       '<div class="field"><label>Outfits <span class="hint">(' + chosen.length + ' gekozen)</span></label>' +
         (chosen.length
           ? '<div class="sel-strip scroll-x">' + chosen.map(function (o) {
-              return '<div class="sel-chip">' + collageHtml(o.itemIds.map(getItem).filter(Boolean), 'collage sel-thumb') +
+              return '<div class="sel-chip">' + outfitBeeld(o, 'collage sel-thumb') +
                 '<span class="sel-name">' + esc(o.name || 'Naamloos') + '</span>' +
                 '<button type="button" class="sel-x" data-act="unpick-outfit" data-id="' + esc(o.id) + '" aria-label="Verwijderen">×</button>' +
               '</div>';
@@ -2653,6 +2752,7 @@
     else card = askimDoneCard();
 
     return '<div class="page">' +
+      deelBanner() +
       '<p class="askim-intro">Geef cijfers, stel je eigen outfits samen en leg spullen op de doneerstapel.</p>' +
 
       '<h3 class="section-title">Beoordelen</h3>' +
@@ -2717,7 +2817,7 @@
     var items = o.itemIds.map(getItem).filter(Boolean);
     var occ = occasionMap[o.occasion];
     return '<div class="askim-card">' +
-      collageHtml(items) +
+      outfitBeeld(o) +
       '<h4 class="askim-name">' + esc(o.name || 'Naamloze outfit') + '</h4>' +
       '<p class="hint center">' + plural(items.length, 'stuk', 'stukken') +
         (occ ? ' · ' + esc(occ.label) : '') +
@@ -2823,36 +2923,94 @@
 
   async function openShareCode() {
     var payload = choicePayload();
+    var donate = payload.items.filter(function (i) { return i.donate; }).length;
+    var cijfers = payload.items.filter(function (i) { return i.rating != null; }).length;
     if (!payload.items.length && !payload.outfits.length) {
-      toast('Nog geen cijfers of outfits om te delen');
+      showSheet('Keuzes delen',
+        '<div class="deel-leeg">' +
+          '<span class="deel-leeg-icoon">💛</span>' +
+          '<b>Nog niets om te delen</b>' +
+          '<p>Geef eerst een paar kledingstukken een cijfer, stel een outfit samen of leg ' +
+            'iets op de doneerstapel. Dat komt hier vanzelf in de code terecht.</p>' +
+        '</div>',
+        '<a class="btn btn-primary btn-block" href="#/askim" data-act="sluit-en-ga" data-href="#/askim">Naar beoordelen</a>' +
+        '<button class="btn btn-ghost btn-block" data-act="picker-close">Sluiten</button>');
       return;
     }
+
     var code = await packCode(JSON.stringify(payload));
     showSheet('Keuzes delen',
-      '<p class="sheet-intro">Deze code bevat de cijfers en doneerkeuzes van ' +
-        plural(payload.items.length, 'kledingstuk', 'kledingstukken') + ' en ' +
-        plural(payload.outfits.length, 'outfit', 'outfits') + '. Er zitten geen foto\'s in, ' +
-        'dus hij past gewoon in een berichtje. De ander kiest daar "Keuzes plakken".</p>' +
+      '<div class="deel-kaart">' +
+        '<span class="deel-kaart-icoon">📋</span>' +
+        '<b>' + plural(code.length, 'teken', 'tekens') + ' die in elk berichtje passen</b>' +
+        '<ul class="deel-lijst">' +
+          (cijfers ? '<li>💛 ' + plural(cijfers, 'cijfer', 'cijfers') + ' bij kleding</li>' : '') +
+          (payload.outfits.length ? '<li>✨ ' + plural(payload.outfits.length, 'outfit', 'outfits') + '</li>' : '') +
+          (donate ? '<li>🎁 ' + plural(donate, 'stuk', 'stukken') + ' op de doneerstapel</li>' : '') +
+        '</ul>' +
+        '<p class="deel-uitleg">Foto\'s zitten er niet in — die zijn te groot. De ander opent ' +
+          'Meer → Keuzes plakken en plakt hem daar.</p>' +
+      '</div>' +
       '<div class="sheet-form">' +
-        '<textarea id="shareCode" class="input code-box" readonly>' + esc(code) + '</textarea>' +
+        '<button type="button" class="btn btn-ghost btn-block" data-act="toon-code">Code bekijken</button>' +
+        '<textarea id="codeDoos" class="input code-box" readonly hidden>' + esc(code) + '</textarea>' +
+        '<textarea id="shareCode" class="code-verborgen" readonly aria-hidden="true" tabindex="-1">' + esc(code) + '</textarea>' +
       '</div>',
-      '<button class="btn btn-primary btn-block" data-act="copy-code">Kopieer naar klembord</button>' +
+      '<button class="btn btn-primary btn-block" data-act="copy-code">📋 Kopieer naar klembord</button>' +
       (navigator.share ? '<button class="btn btn-secondary btn-block" data-act="share-code">Delen…</button>' : '') +
       '<button class="btn btn-ghost btn-block" data-act="picker-close">Sluiten</button>');
   }
 
   function openPasteCode() {
     showSheet('Keuzes plakken',
-      '<p class="sheet-intro">Plak hier de code die je hebt gekregen. Alleen cijfers, ' +
-        'doneerkeuzes en outfits worden overgenomen — je eigen kleding en foto\'s blijven zoals ze zijn.</p>' +
+      '<p class="sheet-intro">Plak de code die je gekregen hebt. Alleen cijfers, doneerkeuzes ' +
+        'en outfits worden overgenomen — je eigen kleding en foto\'s blijven zoals ze zijn.</p>' +
       '<div class="sheet-form">' +
+        '<button type="button" class="btn btn-secondary btn-block" data-act="plak-klembord">' +
+          '📥 Plakken uit klembord</button>' +
         '<textarea id="pasteCode" class="input code-box" placeholder="KAST1Z…" ' +
           'autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>' +
+        '<div id="codeOordeel" class="code-oordeel"></div>' +
       '</div>',
       '<button class="btn btn-primary btn-block" data-act="apply-code">Overnemen</button>' +
       '<button class="btn btn-ghost btn-block" data-act="picker-close">Annuleren</button>');
     var ta = document.getElementById('pasteCode');
     if (ta) ta.focus();
+  }
+
+  /* Meelezen terwijl je plakt: zegt meteen of de code klopt en wat erin zit,
+     zodat je niet op "Overnemen" hoeft te drukken om daarachter te komen. */
+  var keurBeurt = 0;
+  async function keurCode() {
+    var ta = document.getElementById('pasteCode');
+    var uit = document.getElementById('codeOordeel');
+    if (!ta || !uit) return;
+    var beurt = ++keurBeurt;
+    var ruw = ta.value.trim();
+    if (!ruw) { uit.className = 'code-oordeel'; uit.textContent = ''; return; }
+
+    var data = null;
+    try { data = JSON.parse(await unpackCode(ruw)); } catch (err) { data = null; }
+    if (beurt !== keurBeurt) return;    // er is intussen verder getypt
+
+    if (!data || data.app !== 'kledingkast' || !Array.isArray(data.items)) {
+      uit.className = 'code-oordeel mis';
+      uit.textContent = 'Dit lijkt geen kledingkast-code. Kopieer hem nog eens helemaal.';
+      return;
+    }
+    var bekend = data.items.filter(function (i) { return !!getItem(i.id); }).length;
+    var cijfers = data.items.filter(function (i) { return i.rating != null; }).length;
+    var stukje = [];
+    if (cijfers) stukje.push(plural(cijfers, 'cijfer', 'cijfers'));
+    if ((data.outfits || []).length) stukje.push(plural(data.outfits.length, 'outfit', 'outfits'));
+    uit.className = 'code-oordeel goed';
+    uit.innerHTML = '<b>✓ Code herkend</b><span>' +
+      esc(stukje.join(' en ') || 'geen keuzes') +
+      (data.madeAt ? ' · gemaakt op ' + esc(formatDate(String(data.madeAt).slice(0, 10))) : '') + '</span>' +
+      (bekend < data.items.length
+        ? '<span class="code-let">' + (data.items.length - bekend) + ' van de ' + data.items.length +
+          ' stukken ken ik niet — die sla ik over.</span>'
+        : '');
   }
 
   function itemPickerBody() {
@@ -2885,7 +3043,7 @@
       var sel = state.pickerSel.indexOf(o.id) !== -1;
       var items = o.itemIds.map(getItem).filter(Boolean);
       return '<div class="assign-row' + (sel ? ' selected' : '') + '" data-act="picker-toggle" data-id="' + esc(o.id) + '">' +
-        collageHtml(items, 'collage small') +
+        outfitBeeld(o, 'collage small') +
         '<span class="list-text"><b>' + esc(o.name || 'Naamloze outfit') + '</b>' +
         '<span class="list-sub">' + plural(items.length, 'stuk', 'stukken') + '</span></span>' +
         '<span class="pick-mark">✓</span></div>';
@@ -2954,6 +3112,13 @@
     }).join('');
 
     return '<div class="page">' +
+      deelBanner() +
+      overzichtKaart(items, totalWorn) +
+
+      '<h3 class="section-title">Snel naar</h3>' +
+      snelraster() +
+
+      '<h3 class="section-title">Je kast in cijfers</h3>' +
       '<div class="stat-grid">' +
         stat(items.length, 'kledingstukken') +
         stat(state.outfits.length, 'outfits') +
@@ -3048,6 +3213,76 @@
   function stat(num, label) {
     return '<div class="stat"><span class="stat-num" data-target="' + num + '">' + num + '</span>' +
       '<span class="stat-label">' + esc(label) + '</span></div>';
+  }
+
+  /* Een kaartje bovenaan Meer dat in één zin zegt hoe je ervoor staat. */
+  function overzichtKaart(items, totalWorn) {
+    var zin = items.length
+      ? plural(items.length, 'kledingstuk', 'kledingstukken') + ' · ' +
+        plural(state.outfits.length, 'outfit', 'outfits') + ' · ' +
+        plural(totalWorn, 'keer', 'keer') + ' gedragen'
+      : 'Je kast is nog leeg — voeg je eerste kledingstuk toe.';
+    return '<div class="over-kaart">' +
+      '<svg class="over-mark" viewBox="0 0 512 512" aria-hidden="true">' +
+        '<g fill="none" stroke="currentColor" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M256 243 L256 207 A 32 32 0 1 1 288 179"/>' +
+          '<path d="M256 243 L106 357 L406 357 Z"/>' +
+        '</g></svg>' +
+      '<div class="over-tekst"><b>Mijn Kledingkast</b><span>' + esc(zin) + '</span></div>' +
+    '</div>';
+  }
+
+  /* Alles wat de app te bieden heeft op één plek, met de aantallen erbij.
+     Vanuit Meer kom je zo overal, ook bij schermen die geen eigen tabblad
+     hebben zoals de mappen, de agenda en de wasmand. */
+  function snelraster() {
+    var was = laundryItems().length;
+    var donate = donateItems().length;
+    var kastAantal = state.items.filter(function (i) { return bucketOf(i) === 'kast'; }).length;
+    var teBeoordelen = askimQueue().length;
+
+    var links = [
+      { href: '#/kast',     icon: '🚪', label: 'Kast',         n: kastAantal, sub: 'in de kast' },
+      { href: '#/stylist',  icon: '🪄', label: 'Stylist',      n: null, sub: 'Outfit bouwen' },
+      { href: '#/outfits',  icon: '✨', label: 'Outfits',      n: state.outfits.length, sub: 'bewaard' },
+      { href: '#/mappen',   icon: '📁', label: 'Mappen',       n: state.folders.length, sub: 'verzamelingen' },
+      { href: '#/agenda',   icon: '🗓️', label: 'Agenda',       n: null, sub: 'Deze week' },
+      { href: '#/askim',    icon: '💛', label: 'Mijn Askim',   n: teBeoordelen || null,
+        sub: teBeoordelen ? 'te beoordelen' : 'Alles beoordeeld' },
+      { href: '#/kast',     icon: '🧺', label: 'Wasmand',      n: was, sub: 'in de was', act: 'ga-wasmand' },
+      { href: '#/doneren',  icon: '🎁', label: 'Doneerstapel', n: donate, sub: 'weg te geven' }
+    ];
+
+    return '<div class="snel">' + links.map(function (l) {
+      return '<a class="snel-kaart" href="' + l.href + '"' +
+          (l.act ? ' data-act="' + l.act + '"' : '') + '>' +
+        '<span class="snel-icoon">' + l.icon + '</span>' +
+        '<span class="snel-naam">' + esc(l.label) + '</span>' +
+        '<span class="snel-sub">' + (l.n != null ? l.n + (l.sub ? ' ' + esc(l.sub) : '') : esc(l.sub || '')) + '</span>' +
+      '</a>';
+    }).join('') + '</div>';
+  }
+
+  /* Wat een geplakte code opleverde, rustig na te lezen op het scherm zelf.
+     Een paneel zou je moeten wegklikken; dit staat er gewoon. */
+  function deelBanner() {
+    var r = state.deelResultaat;
+    if (!r) return '';
+    var regels = [];
+    if (r.itemRatings) regels.push(plural(r.itemRatings, 'cijfer', 'cijfers') + ' bij kleding');
+    if (r.outfitRatings) regels.push(plural(r.outfitRatings, 'cijfer', 'cijfers') + ' bij outfits');
+    if (r.outfitsAdded) regels.push(plural(r.outfitsAdded, 'nieuwe outfit', 'nieuwe outfits'));
+    if (r.donated) regels.push(plural(r.donated, 'stuk', 'stukken') + ' op de doneerstapel');
+    return '<div class="deel-uitslag">' +
+      '<button type="button" class="deel-x" data-act="deel-sluit" aria-label="Sluiten">×</button>' +
+      '<b>' + (regels.length ? '✓ Keuzes overgenomen' : 'Er viel niets over te nemen') + '</b>' +
+      (regels.length ? '<span>' + esc(regels.join(' · ')) + '</span>' : '') +
+      (r.unknown
+        ? '<span class="deel-let">' + plural(r.unknown, 'stuk', 'stukken') + ' uit de code ' +
+          (r.unknown === 1 ? 'zit' : 'zitten') + ' niet in deze kast. Stuur eerst een volledige ' +
+          'back-up, dan herkent de app ze.</span>'
+        : '') +
+    '</div>';
   }
 
   async function buildBackupBlob() {
@@ -3149,6 +3384,7 @@
   function choicePayload() {
     return {
       app: 'kledingkast', kind: 'keuzes', version: 2,
+      madeAt: new Date().toISOString(),
       items: state.items
         .filter(function (i) { return i.rating != null || i.donate; })
         .map(function (i) { return { id: i.id, rating: i.rating, donate: !!i.donate }; }),
@@ -3220,14 +3456,17 @@
      doneerkeuzes en haar eigen outfits. De rest van jouw kast blijft intact. */
   async function mergeAskim(data) {
     var ratings = 0, outfitsAdded = 0;
+    var itemRatings = 0, outfitRatings = 0, donated = 0, unknown = 0;
 
     for (var i = 0; i < data.items.length; i++) {
       var src = normalizeItem(data.items[i]);
       var mine = getItem(src.id);
-      if (!mine) continue;
+      // Kleding die deze kast niet kent kunnen we niets mee; onthouden hoeveel
+      // dat er zijn, anders lijkt een code uit een andere kast gewoon leeg.
+      if (!mine) { unknown++; continue; }
       var changed = false;
-      if (src.rating != null && src.rating !== mine.rating) { mine.rating = src.rating; changed = true; }
-      if (src.donate && !mine.donate) { mine.donate = true; changed = true; }
+      if (src.rating != null && src.rating !== mine.rating) { mine.rating = src.rating; changed = true; itemRatings++; }
+      if (src.donate && !mine.donate) { mine.donate = true; changed = true; donated++; }
       if (changed) { await saveItem(mine); ratings++; }
     }
 
@@ -3241,6 +3480,7 @@
           mineOutfit.rating = o.rating;
           await saveOutfit(mineOutfit);
           ratings++;
+          outfitRatings++;
         }
         continue;
       }
@@ -3266,7 +3506,31 @@
       await saveFolder(flds[k]);
     }
 
-    return { ratings: ratings, outfits: outfitsAdded };
+    return {
+      ratings: ratings, outfits: outfitsAdded,
+      itemRatings: itemRatings, outfitRatings: outfitRatings,
+      outfitsAdded: outfitsAdded, donated: donated, unknown: unknown
+    };
+  }
+
+  /* Foto's echt kopiëren, niet delen: gedeelde beeldrecords zouden bij het
+     verwijderen van het ene ding de foto's van het andere meenemen. Geldt voor
+     kledingstukken en voor outfits met een eigen foto. */
+  async function kopieerFotos(bron, kopie) {
+    var cover = coverImageOf(bron);
+    var ids = bron.imageIds || [];
+    var nieuwe = [];
+    kopie.coverImageId = null;
+    for (var n = 0; n < ids.length; n++) {
+      var rec = await KastDB.get(KastDB.IMAGES, ids[n]);
+      if (!rec) continue;
+      var nid = uid('img');
+      await KastDB.put(KastDB.IMAGES, { id: nid, full: rec.full, thumb: rec.thumb });
+      nieuwe.push(nid);
+      if (ids[n] === cover) kopie.coverImageId = nid;
+    }
+    kopie.imageIds = nieuwe;
+    if (!kopie.coverImageId) kopie.coverImageId = nieuwe[0] || null;
   }
 
   /* ─────────────────────────────── Dialoogje ─────────────────────────────── */
@@ -3464,6 +3728,7 @@
       kopie.lastWorn = null;
       kopie.rating = null;
       kopie.createdAt = Date.now();
+      await kopieerFotos(o, kopie);
       await saveOutfit(kopie);
       toast('Kopie gemaakt');
       go('#/outfit/' + kopie.id + '/edit');
@@ -3511,15 +3776,15 @@
     /* Foto's van een kledingstuk */
     'set-cover': function (btn) {
       var d = state.draft;
-      if (!d || d.kind !== 'item') return;
+      if (!d || !d.photos) return;
       d.cover = btn.getAttribute('data-id');
-      syncItemDraftFromDom();
+      syncDraftFromDom();
       render();
       toast('Hoofdfoto ingesteld');
     },
     'drop-photo': function (btn) {
       var d = state.draft;
-      if (!d || d.kind !== 'item') return;
+      if (!d || !d.photos) return;
       var pid = btn.getAttribute('data-id');
       d.photos = d.photos.filter(function (p) {
         if (p.id !== pid) return true;
@@ -3529,7 +3794,7 @@
         return false;
       });
       if (d.cover === pid) d.cover = d.photos.length ? d.photos[0].id : null;
-      syncItemDraftFromDom();
+      syncDraftFromDom();
       render();
     },
     'show-photo': function (btn) {
@@ -3697,19 +3962,7 @@
 
       // Foto's echt kopiëren: gedeelde beeldrecords zouden bij het verwijderen
       // van het ene stuk de foto's van het andere meenemen.
-      var cover = coverImageOf(it);
-      var nieuweIds = [];
-      kopie.coverImageId = null;
-      for (var n = 0; n < it.imageIds.length; n++) {
-        var rec = await KastDB.get(KastDB.IMAGES, it.imageIds[n]);
-        if (!rec) continue;
-        var nid = uid('img');
-        await KastDB.put(KastDB.IMAGES, { id: nid, full: rec.full, thumb: rec.thumb });
-        nieuweIds.push(nid);
-        if (it.imageIds[n] === cover) kopie.coverImageId = nid;
-      }
-      kopie.imageIds = nieuweIds;
-      if (!kopie.coverImageId) kopie.coverImageId = nieuweIds[0] || null;
+      await kopieerFotos(it, kopie);
 
       await saveItem(kopie);
       toast('Kopie gemaakt');
@@ -3786,6 +4039,34 @@
     'import': function () { els.fileImport.click(); },
     'share-choices': function () { openShareCode(); },
     'paste-choices': function () { openPasteCode(); },
+    'ga-wasmand': function () { state.filters.vak = 'laundry'; go('#/kast'); },
+    'sluit-en-ga': function (btn) { closeOverlay(); go(btn.getAttribute('data-href')); },
+    'deel-sluit': function () { state.deelResultaat = null; render(); },
+    'toon-code': function (btn) {
+      var doos = document.getElementById('codeDoos');
+      if (!doos) return;
+      var open = doos.hasAttribute('hidden');
+      if (open) doos.removeAttribute('hidden'); else doos.setAttribute('hidden', '');
+      btn.textContent = open ? 'Code verbergen' : 'Code bekijken';
+    },
+    'plak-klembord': async function () {
+      var ta = document.getElementById('pasteCode');
+      if (!ta) return;
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        toast('Plak de code met je vinger in het vak');
+        ta.focus();
+        return;
+      }
+      try {
+        var tekst = await navigator.clipboard.readText();
+        if (!tekst) { toast('Er staat niets op je klembord'); return; }
+        ta.value = tekst;
+        keurCode();
+      } catch (err) {
+        toast('Plak de code met je vinger in het vak');
+        ta.focus();
+      }
+    },
     'copy-code': async function () {
       var ta = document.getElementById('shareCode');
       if (!ta) return;
@@ -3826,8 +4107,13 @@
       closeOverlay();
       toast('Keuzes overnemen…');
       var res = await mergeAskim(data);
+      state.deelResultaat = res;
       render();
-      toast(res.ratings + ' cijfers en ' + plural(res.outfits, 'outfit', 'outfits') + ' overgenomen');
+      toast(res.ratings || res.outfitsAdded
+        ? res.ratings + ' cijfers en ' + plural(res.outfitsAdded, 'outfit', 'outfits') + ' overgenomen'
+        : 'Er viel niets over te nemen');
+      var uitslag = document.querySelector('.deel-uitslag');
+      if (uitslag) uitslag.scrollIntoView({ block: 'nearest' });
     },
     'set-theme': function (btn) {
       setTheme(btn.getAttribute('data-val'));
@@ -3896,6 +4182,8 @@
     } else if (ev.target.id === 'outfitSearch') {
       state.outfitFilter.q = ev.target.value;
       refreshOutfitList();
+    } else if (ev.target.id === 'pasteCode') {
+      keurCode();
     }
   }
 
@@ -3943,8 +4231,10 @@
   async function onPhotoChosen(ev) {
     var files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = '';
-    if (!files.length || !state.draft || state.draft.kind !== 'item') return;
-    syncItemDraftFromDom();
+    // Zowel een kledingstuk als een outfit kan foto's hebben; het verschil is
+    // dat kleurherkenning alleen bij een kledingstuk ergens op slaat.
+    if (!files.length || !state.draft || !state.draft.photos) return;
+    syncDraftFromDom();
     toonBezig(files.length > 1 ? files.length + ' foto\'s verwerken…' : 'Foto verwerken…');
     var d = state.draft;
     var added = 0;
@@ -3957,7 +4247,7 @@
         if (!d.cover) d.cover = imgId;
         // Alleen invullen als er nog niets gekozen is; een eigen keuze
         // overschrijven zou vervelend zijn.
-        if (!d.data.colors.length && processed.colors.length) {
+        if (d.kind === 'item' && !d.data.colors.length && processed.colors.length) {
           d.data.colors = processed.colors.slice();
           herkend = processed.colors.slice();
         }

@@ -878,6 +878,172 @@ input, textarea, select { font: inherit; }
 
 .toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
+/* Een outfit met een eigen foto laat die zien in plaats van een collage.
+   De maten van .collage blijven gelden, dus hij past overal waar de collage
+   ook paste; alleen het raster maakt plaats voor één beeld. */
+.collage.outfit-foto {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.collage.outfit-foto .ph-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.collage.outfit-foto .ph-fallback { font-size: 26px; }
+
+/* Uitnodiging op een outfit die nog geen kleding heeft. */
+.nog-leeg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 15px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.nog-leeg p { font-size: 13.5px; color: var(--ink-soft); }
+
+/* ───────────────────────── Meer: overzicht en snelkoppelingen ───────────── */
+
+.over-kaart {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 16px;
+  margin-bottom: 4px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(150deg,
+    color-mix(in srgb, var(--accent-soft) 75%, var(--surface)), var(--surface) 62%);
+  box-shadow: var(--shadow);
+}
+
+.over-mark { width: 38px; height: 38px; flex: none; color: var(--accent); }
+.over-tekst { display: flex; flex-direction: column; min-width: 0; }
+
+.over-tekst b {
+  font-family: var(--font-display);
+  font-size: 17.5px;
+  letter-spacing: -.015em;
+}
+
+.over-tekst span { font-size: 12.5px; color: var(--ink-soft); }
+
+/* Vanuit Meer kom je overal: ook bij schermen zonder eigen tabblad. */
+.snel {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+}
+
+.snel-kaart {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 13px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: transform .18s var(--veer), box-shadow .25s ease, border-color .18s ease;
+}
+
+.snel-kaart:active { transform: scale(.97); }
+.snel-icoon { font-size: 21px; line-height: 1.25; }
+.snel-naam { font-size: 14px; font-weight: 600; letter-spacing: -.005em; }
+.snel-sub { font-size: 11.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+@media (min-width: 460px) { .snel { grid-template-columns: repeat(3, 1fr); } }
+
+/* Uitslag van een geplakte deelcode, gewoon op het scherm. */
+.deel-uitslag {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 40px 14px 15px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
+  animation: panelIn .3s var(--veer) both;
+}
+
+.deel-uitslag b { font-size: 14.5px; }
+.deel-uitslag span { font-size: 12.5px; color: var(--ink-soft); }
+.deel-let, .code-let { color: var(--danger) !important; }
+
+.deel-x {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ───────────────────────── Deelcode: delen en plakken ──────────────────── */
+
+.deel-kaart, .deel-leeg {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.deel-leeg { align-items: center; text-align: center; }
+.deel-kaart-icoon, .deel-leeg-icoon { font-size: 26px; }
+.deel-kaart b, .deel-leeg b { font-size: 15px; }
+.deel-leeg p { font-size: 13px; color: var(--ink-soft); }
+
+.deel-lijst {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+}
+
+.deel-uitleg { font-size: 12.5px; color: var(--ink-soft); }
+
+/* De code zelf is een blok ruis; die hoef je alleen te zien als je wilt.
+   Voor kopiëren moet hij wél in het document staan, dus staat er een
+   tweede, onzichtbare kopie in beeld die geen ruimte inneemt. */
+.code-verborgen {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.code-oordeel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  min-height: 4px;
+}
+
+.code-oordeel:empty { display: none; }
+.code-oordeel.goed { color: var(--ink-soft); }
+.code-oordeel.goed b { color: var(--accent); font-size: 13.5px; }
+.code-oordeel.mis { color: var(--danger); }
+
 /* ─────────────────────────────── Stylist ───────────────────────────────
    Banen boven elkaar; per baan blader je zijwaarts door één laag van je
    kast. Wat je aantikt blijft staan, en onderaan telt de balk het op. */

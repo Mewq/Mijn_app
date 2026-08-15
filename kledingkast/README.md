@@ -69,6 +69,13 @@ internet.
 **Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
   gelegenheid, seizoen en notities.
+- Een outfit mag ook **een eigen foto** hebben — een kiekje van de hele look in
+  de paskamer of voor de spiegel. Heeft hij die, dan zie je die foto overal
+  terug in plaats van het collagetje van losse stukken.
+- Je hoeft niet in één keer klaar te zijn: een outfit met alleen een foto of
+  alleen een naam kun je gewoon bewaren en later aanvullen. Op zo'n outfit staat
+  een knop **"Kleding erbij zoeken"**. Helemaal leeg opslaan kan niet — dan
+  stond er straks een lege regel in je lijst.
 - Zoeken op naam of op een kledingstuk dat erin zit, filteren op gelegenheid en
   op wie hem maakte, en sorteren op nieuwste of op het cijfer van Askim.
 - **Dupliceren** maakt een kopie die meteen openklapt om aan te passen — handig
@@ -103,6 +110,15 @@ internet.
   Onder Meer zie je daarmee de waarde van je kast.
 - Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie en per
   kleur, wat je het meest draagt en wat nog nooit aan is geweest.
+
+**Meer**
+- Bovenaan een kaartje dat in één zin zegt hoe je ervoor staat.
+- Daaronder **Snel naar**: acht knoppen naar alles wat de app te bieden heeft,
+  met de aantallen erbij. Ook naar de schermen die geen eigen tabblad hebben —
+  de mappen, de agenda, de wasmand en de doneerstapel. De wasmandknop zet het
+  vak meteen goed, zodat je daar niet zelf een filter voor hoeft te zoeken.
+- Daarna de cijfers, de staafjes per categorie en per kleur, het thema, de
+  deelcode, de back-up en het opruimen.
 - Op een kledingstuk laat **"Combineer je met"** zien wat je er in de praktijk
   het vaakst bij draagt, afgeleid uit je outfits.
 
@@ -164,6 +180,23 @@ Niet alles hoeft via de Bestanden-app.
   honderd tekens, die je gewoon in een berichtje plakt. Kopiëren gaat met één
   tik naar het klembord; aan de andere kant plak je hem bij **Keuzes plakken**.
   Dat voegt samen — je eigen kleding en foto's blijven zoals ze zijn.
+
+  Wat je onderweg te zien krijgt:
+
+  - Vóór het versturen een kaartje met hoe groot de code is en wat erin zit.
+    De code zelf staat er ook, maar pas als je op "Code bekijken" tikt — het is
+    een blok ruis waar niemand op zit te wachten.
+  - Heb je nog niets beoordeeld, dan krijg je geen lege code maar uitleg en een
+    knop naar het beoordeelscherm.
+  - Bij het plakken staat er een knop **Plakken uit klembord**, en zodra er iets
+    in het vak staat leest de app mee: hij zegt meteen of de code klopt, wat
+    erin zit en wanneer hij gemaakt is.
+  - Herkent hij kleding uit de code niet, dan zegt hij dat vooraf én achteraf —
+    met de tip om eerst een volledige back-up te sturen. Zonder die melding zou
+    een code uit een andere kast er gewoon leeg uitzien.
+  - Na het overnemen blijft er een kaartje op het scherm staan met wat er
+    precies veranderd is: cijfers bij kleding, cijfers bij outfits, nieuwe
+    outfits en wat er op de doneerstapel bij kwam.
 - **Back-up delen.** Op een telefoon opent **Back-up delen** het gewone
   deelmenu, zodat het bestand rechtstreeks naar WhatsApp of AirDrop gaat zonder
   eerst ergens te landen. Kan de browser dat niet, dan valt hij terug op
@@ -306,8 +339,14 @@ miniatuur van 480 px voor het overzicht) en als JPEG-blob opgeslagen. Een foto
 van de telefoon van enkele megabytes wordt zo een paar honderd kilobyte.
 
 Een kledingstuk bewaart zijn foto's als `imageIds` met daarnaast een
-`coverImageId` voor de hoofdfoto. Back-ups uit een eerdere versie hadden één
-`imageId`; die worden bij het inladen automatisch omgezet.
+`coverImageId` voor de hoofdfoto. Een outfit gebruikt precies dezelfde twee
+velden, zodat één `outfitConcept()` en één `kopieerFotos()` voor allebei
+werken. Back-ups uit een eerdere versie hadden één `imageId`; die worden bij
+het inladen automatisch omgezet.
+
+Let op als je een concept ergens anders vandaan vult — de stylist doet dat —
+dat het dezelfde vorm heeft. Een outfitconcept zonder `photos` liet het
+formulier meteen struikelen.
 
 Kleurherkenning gebeurt lokaal op een canvas van 64×80 pixels, in Lab-ruimte:
 in RGB liggen zwart en donkergrijs dicht bij elkaar terwijl ze er duidelijk
