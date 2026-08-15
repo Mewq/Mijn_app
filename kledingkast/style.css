@@ -399,7 +399,10 @@ input, textarea, select { font: inherit; }
   cursor: pointer;
 }
 
-.tile-photo, .photo-frame, .list-thumb, .sel-thumb, .collage-cell {
+/* Elke fotohouder moet zelf positie hebben: de <img> erin staat absoluut, en
+   zonder houder valt hij terug op de pagina en legt hij zich over alles heen. */
+.tile-photo, .photo-frame, .list-thumb, .sel-thumb, .collage-cell,
+.rail-photo, .podium-foto, .eens-foto, .maand-foto {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius);
@@ -1889,7 +1892,8 @@ input, textarea, select { font: inherit; }
 
 /* Een witte blouse op een lichte achtergrond heeft anders geen rand. */
 .tile-photo::after, .photo-frame::after, .list-thumb::after, .sel-thumb::after,
-.collage-cell::after, .photo-thumb::after, .gallery-thumb::after {
+.collage-cell::after, .photo-thumb::after, .gallery-thumb::after,
+.podium-foto::after, .eens-foto::after, .maand-foto::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -2378,4 +2382,263 @@ input, textarea, select { font: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ═══════════════ Askim: duel, podium, wenslijst en briefjes ═════════════ */
+
+/* Twee outfits naast elkaar; kiezen is makkelijker dan een cijfer geven. */
+.duel {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 14px;
+}
+
+.duel-kaart {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .2s var(--veer);
+}
+
+.duel-kaart:active { transform: scale(.96); }
+
+.collage.duel-beeld {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.duel-naam { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.duel-punten { font-size: 11px; color: var(--ink-faint); }
+
+/* Het "of" hangt tussen de twee kaarten in. */
+.duel-of {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+/* Podium: tweede, eerste, derde — het midden staat hoger. */
+.podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 9px;
+  padding: 0 14px;
+}
+
+.podium-plek {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.podium-plek.plek-1 { padding-bottom: 16px; }
+.podium-medaille { font-size: 20px; line-height: 1; }
+
+.podium-foto {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.podium-plek.plek-1 .podium-foto { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.podium-naam {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.podium-cijfer {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-fav.wens { text-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+
+/* Waar jullie het over eens zijn. */
+.eens-kaart {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 14px;
+  padding: 14px 15px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: var(--accent-soft);
+}
+
+.eens-hart { font-size: 22px; }
+.eens-kaart b { font-size: 14.5px; }
+.eens-kaart > span:not(.eens-hart) { font-size: 12.5px; color: var(--ink-soft); }
+.eens-rij { display: flex; gap: 6px; margin-top: 6px; }
+
+.eens-foto {
+  width: 42px;
+  height: 54px;
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+/* Briefje bij een cijfer. */
+.briefje { margin-top: 10px; }
+
+.briefje-tekst {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 13.5px;
+  font-style: italic;
+}
+
+.briefje-rij { display: flex; gap: 8px; }
+.briefje-rij .input { flex: 1; min-width: 0; }
+.briefje-rij .btn { flex: none; }
+
+/* ══════════════ Weer, snel aanvinken, opruimen en de maand ══════════════ */
+
+.weer-rij {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 12px;
+  font-size: 13.5px;
+}
+
+.weer-rij label { flex: 1; min-width: 0; }
+.weer-in { width: 84px; flex: none; text-align: center; }
+.weer-rij .btn { flex: none; min-height: 40px; padding: 0 13px; }
+
+.day-weer {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tip in de stylist als de temperatuur van vandaag bekend is. */
+.weer-tip {
+  display: block;
+  width: calc(100% - 28px);
+  margin: 0 14px 8px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 100px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* Snel aanvinken wat je vandaag droeg. */
+.vak-banner.aanvink { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.grid.aanvinken .tile { border: 0; }
+.grid.aanvinken .tile-photo { transition: box-shadow .2s ease, transform .2s var(--veer); }
+.grid.aanvinken .tile:active .tile-photo { transform: scale(.95); }
+.grid.aanvinken .tile.gedragen .tile-photo { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tile-vink {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+  animation: vinkIn .3s var(--veer) both;
+}
+
+@keyframes vinkIn {
+  from { transform: scale(0) rotate(-40deg); }
+  to { transform: none; }
+}
+
+/* Een afgehandelde opruimrij schuift weg. */
+@keyframes rijWeg {
+  to { opacity: 0; transform: translateX(-40%); max-height: 0; margin-bottom: 0; }
+}
+
+[data-opruim].weg { animation: rijWeg .26s cubic-bezier(.5, 0, .8, .3) both; overflow: hidden; }
+
+/* Maandoverzicht. */
+.maand-kaart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 14px 15px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.maand-kop {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: var(--ink-faint);
+}
+
+.maand-kaart b { font-size: 18px; font-family: var(--font-display); letter-spacing: -.015em; }
+.maand-sub { font-size: 12.5px; color: var(--ink-soft); }
+
+.maand-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.maand-foto {
+  width: 40px;
+  height: 50px;
+  flex: none;
+  border-radius: 9px;
+  overflow: hidden;
 }

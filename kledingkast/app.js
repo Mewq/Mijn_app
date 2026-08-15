@@ -98,7 +98,7 @@
     folders: [],
     ready: false,
     filters: { q: '', cat: '', season: '', color: '', tag: '', fav: false, unworn: false,
-               vak: 'kast', sort: 'recent' },
+               wish: false, vak: 'kast', sort: 'recent' },
     filtersOpen: false,
     draft: null,          // formuliergegevens tijdens bewerken
     pickerSel: null,      // selectie in de kiezer
@@ -111,7 +111,9 @@
     weekOffset: 0,          // 0 = deze week in de agenda
     stylist: {},            // baan -> gekozen kledingstuk-id
     stylistSeason: '',      // filter op seizoen in de stylist
-    deelResultaat: null     // wat de laatst geplakte code opleverde
+    deelResultaat: null,    // wat de laatst geplakte code opleverde
+    duel: null,             // de twee outfits die nu tegenover elkaar staan
+    wearMode: false         // tikken in de kast = vandaag gedragen
   };
 
   var els = {};
@@ -151,6 +153,9 @@
   }
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  /* Toast zet zelf geen html, dus daar hoeft niets ontsnapt te worden. */
+  function esc2(s) { return String(s == null ? '' : s); }
 
   function euro(n) {
     if (n == null || isNaN(n)) return '';
@@ -481,6 +486,51 @@
      'systeem' volgt de telefoon; 'licht' en 'donker' overrulen dat. */
 
   var THEME_KEY = 'kledingkast-thema';
+  var WEER_KEY = 'kledingkast-weer';
+
+  /* ── Weer per dag ──
+     Handmatig ingevuld: de app kan niet op internet, dus een verwachting
+     ophalen gaat niet. Eén getal per dag is genoeg om te weten of je je voor
+     kou of voor warmte aankleedt. */
+  var weerCache = null;
+
+  function alleWeer() {
+    if (weerCache) return weerCache;
+    try { weerCache = JSON.parse(localStorage.getItem(WEER_KEY) || '{}') || {}; }
+    catch (e) { weerCache = {}; }
+    return weerCache;
+  }
+
+  function weerOp(iso) {
+    var t = alleWeer()[iso];
+    return typeof t === 'number' ? t : null;
+  }
+
+  function zetWeer(iso, graden) {
+    var alles = alleWeer();
+    if (graden === null || graden === undefined || isNaN(graden)) delete alles[iso];
+    else alles[iso] = Math.round(graden);
+    weerCache = alles;
+    try { localStorage.setItem(WEER_KEY, JSON.stringify(alles)); } catch (e) { /* privémodus */ }
+  }
+
+  /* Welk seizoen hoort bij deze temperatuur? Grof, maar bruikbaar: het gaat
+     erom of je een jas nodig hebt, niet om de kalender. */
+  function seizoenBijGraden(t) {
+    if (t === null || t === undefined) return '';
+    if (t <= 7) return 'winter';
+    if (t <= 15) return 'herfst';
+    if (t <= 21) return 'lente';
+    return 'zomer';
+  }
+
+  function weerLabel(t) {
+    if (t === null) return '';
+    var s = seizoenBijGraden(t);
+    var seizoen = seasonMap[s] || {};
+    return (seizoen.icon || '') + ' ' + t + '°';
+  }
+
 
   function currentTheme() {
     try { return localStorage.getItem(THEME_KEY) || 'systeem'; }
@@ -835,6 +885,8 @@
       brand: '', size: '', notes: '', favorite: false,
       wearCount: 0, lastWorn: null, imageIds: [], coverImageId: null,
       rating: null,        // cijfer van Askim, 1 t/m 10
+      askimNote: '',       // briefje van Askim bij haar cijfer
+      askimWish: false,    // door Askim op de wenslijst gezet
       donate: false,       // ligt op de doneerstapel
       price: null,         // aanschafprijs in euro's
       tags: [],            // vrije labels
@@ -851,6 +903,7 @@
       notes: '', favorite: false, wearCount: 0, lastWorn: null,
       author: author || 'ik',   // 'ik' of 'askim'
       rating: null,             // cijfer van Askim, 1 t/m 10
+      askimNote: '',            // briefje van Askim bij haar cijfer
       price: null,              // optionele prijs, bijv. voor iets wat je nog wilt kopen
       wearDates: [],            // op welke dagen gedragen
       plannedDates: [],         // voor welke dagen ingepland
@@ -886,6 +939,8 @@
     if (i.price === undefined) i.price = null;
     if (!i.tags) i.tags = [];
     if (i.laundry === undefined) i.laundry = false;
+    if (i.askimNote === undefined) i.askimNote = '';
+    if (i.askimWish === undefined) i.askimWish = false;
     // Oudere records kennen alleen een teller en de laatste datum. Die laatste
     // dag nemen we mee, zodat de agenda niet bij nul begint; de teller blijft
     // leidend voor het aantal.
@@ -901,6 +956,9 @@
     o.author = o.author || 'ik';
     if (o.rating === undefined) o.rating = null;
     if (o.price === undefined) o.price = null;
+    if (o.askimNote === undefined) o.askimNote = '';
+    if (!o.imageIds) o.imageIds = [];
+    if (!o.coverImageId) o.coverImageId = o.imageIds[0] || null;
     if (!o.wearDates) o.wearDates = o.lastWorn ? [o.lastWorn] : [];
     if (!o.plannedDates) o.plannedDates = [];
     return o;
@@ -1119,6 +1177,7 @@
       if (!itemMatchesSeason(it, f.season)) return false;
       if (f.fav && !it.favorite) return false;
       if (f.unworn && (it.wearCount || 0) > 0) return false;
+      if (f.wish && !it.askimWish) return false;
       if (q) {
         var hay = [it.name, it.brand, it.notes, (catMap[it.category] || {}).label]
           .concat(it.tags || [])
@@ -1144,7 +1203,7 @@
   function activeFilterCount() {
     var f = state.filters;
     return (f.season ? 1 : 0) + (f.color ? 1 : 0) + (f.tag ? 1 : 0) + (f.fav ? 1 : 0) +
-      (f.unworn ? 1 : 0) + (f.vak !== 'kast' ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
+      (f.unworn ? 1 : 0) + (f.wish ? 1 : 0) + (f.vak !== 'kast' ? 1 : 0) + (f.sort !== 'recent' ? 1 : 0);
   }
 
   /* In welk vak hoort dit stuk? Doneren wint van de wasmand. */
@@ -1260,7 +1319,7 @@
     if (parts[0] === 'mappen' || parts[0] === 'map' || parts[0] === 'agenda') return 'outfits';
     if (parts[0] === 'stylist') return 'stylist';
     if (parts[0] === 'askim') return 'askim';
-    if (parts[0] === 'meer' || parts[0] === 'doneren') return 'meer';
+    if (parts[0] === 'meer' || parts[0] === 'doneren' || parts[0] === 'opruimen') return 'meer';
     return 'kast';
   }
 
@@ -1277,7 +1336,7 @@
       var nieuw = String(parts[1]).indexOf('new') === 0;
       return (nieuw || parts[2] === 'edit') ? 2 : 1;
     }
-    if (p0 === 'doneren') return 1;
+    if (p0 === 'doneren' || p0 === 'opruimen') return 1;
     return 0;
   }
 
@@ -1322,6 +1381,10 @@
       case 'doneren':
         top = topBar('Doneren', '#/meer');
         view = viewDoneren();
+        break;
+      case 'opruimen':
+        top = topBar('Opruimen', '#/meer');
+        view = viewOpruimen();
         break;
       case 'mappen':
         top = topBar('Outfits', null, '<button class="icon-btn" data-act="new-folder" title="Nieuwe map">+</button>');
@@ -1492,11 +1555,13 @@
           '<span class="list-text"><span class="list-sub">Niets ingepland</span></span>';
       }
 
+      var graden = weerOp(iso);
       rows += '<div class="day-row' + (iso === today ? ' today' : '') +
           (worn ? ' worn' : planned ? ' planned' : '') + '" ' +
           'data-act="plan-day" data-date="' + iso + '">' +
         '<span class="day-date"><b>' + dayName(d) + '</b><i>' + d.getDate() + '</i></span>' +
         body +
+        (graden !== null ? '<span class="day-weer">' + esc(weerLabel(graden)) + '</span>' : '') +
         '<span class="chev">›</span></div>';
     }
 
@@ -1536,10 +1601,22 @@
         }).join('') + '</div>'
       : '<p class="empty-text">Je hebt nog geen outfits om in te plannen.</p>';
 
+    var graden = weerOp(date);
+    var weerVak = '<div class="weer-rij">' +
+      '<label for="weerIn">🌡️ Hoe warm wordt het?</label>' +
+      '<input id="weerIn" class="input weer-in" type="number" inputmode="numeric" ' +
+        'min="-30" max="50" step="1" placeholder="°C" ' +
+        'value="' + (graden === null ? '' : graden) + '" data-weer-date="' + esc(date) + '">' +
+      '<button type="button" class="btn btn-secondary" data-act="zet-weer" data-date="' + esc(date) + '">Bewaren</button>' +
+    '</div>' +
+    (graden !== null
+      ? '<p class="hint block">' + esc(weerLabel(graden)) + ' — de stylist zet zichzelf hierop.</p>'
+      : '');
+
     showSheet(dayName(d) + ' ' + d.getDate() + ' ' + monthName(d),
       '<p class="sheet-intro">' + (isPast
         ? 'Kies wat je die dag aanhad — dat telt meteen als gedragen.'
-        : 'Kies wat je die dag aantrekt.') + '</p>' + body,
+        : 'Kies wat je die dag aantrekt.') + '</p>' + weerVak + body,
       (huidig
         ? '<button class="btn btn-secondary btn-block" data-act="plan-clear" data-date="' + esc(date) + '">Dag leegmaken</button>'
         : '') +
@@ -1562,6 +1639,8 @@
       '<div class="toolbar">' +
         '<div class="search"><span class="search-icon">🔎</span>' +
           '<input id="search" class="search-input" type="search" placeholder="Zoek op naam, merk of kleur" value="' + esc(state.filters.q) + '">' +
+          '<button class="icon-btn small' + (state.wearMode ? ' active' : '') + '" data-act="wear-mode" ' +
+            'title="Snel aanvinken wat je vandaag droeg" aria-pressed="' + (state.wearMode ? 'true' : 'false') + '">✓</button>' +
           '<button class="icon-btn small' + (state.filtersOpen ? ' active' : '') + '" data-act="toggle-filters">' +
             '⚙︎' + (activeFilterCount() ? '<i class="badge-dot"></i>' : '') +
           '</button>' +
@@ -1570,7 +1649,11 @@
         (state.filtersOpen ? filterPanel() : '') +
       '</div>' +
       vakBanner() +
-      '<div id="grid" class="grid">' + gridHtml() + '</div>';
+      (state.wearMode
+        ? '<div class="vak-banner aanvink">✓ Tik aan wat je vandaag droeg.' +
+            '<button type="button" class="btn btn-ghost" data-act="wear-mode">Klaar</button></div>'
+        : '') +
+      '<div id="grid" class="grid' + (state.wearMode ? ' aanvinken' : '') + '">' + gridHtml() + '</div>';
   }
 
   /* Laat zien waar je naar kijkt, en waar nog wat ligt. Zonder dit lijkt
@@ -1607,6 +1690,7 @@
         '<div class="chips">' +
           '<button type="button" class="chip' + (f.fav ? ' active' : '') + '" data-act="filter-fav">★ Favorieten</button>' +
           '<button type="button" class="chip' + (f.unworn ? ' active' : '') + '" data-act="filter-unworn">Nooit gedragen</button>' +
+          '<button type="button" class="chip' + (f.wish ? ' active' : '') + '" data-act="filter-wish">💖 Wenslijst</button>' +
           '<button type="button" class="chip' + (f.vak === 'laundry' ? ' active' : '') + '" data-act="filter-vak" data-val="laundry">🧺 In de was</button>' +
           '<button type="button" class="chip' + (f.vak === 'donate' ? ' active' : '') + '" data-act="filter-vak" data-val="donate">🎁 Doneerstapel</button>' +
         '</div></div>' +
@@ -1629,10 +1713,16 @@
         '<p class="empty-text">Niets gevonden met deze filters.</p>' +
         '<button class="btn btn-ghost" data-act="filter-reset">Filters wissen</button></div>';
     }
+    var vinken = state.wearMode;
     return list.map(function (it) {
       var cat = catMap[it.category] || catMap.overig;
       var extra = (it.imageIds || []).length;
-      return '<a class="tile" href="#/item/' + esc(it.id) + '">' +
+      var vandaag = vinken && wornOn(it, todayISO());
+      var open = vinken
+        ? '<button type="button" class="tile' + (vandaag ? ' gedragen' : '') + '" ' +
+          'data-act="wear-tile" data-id="' + esc(it.id) + '">'
+        : '<a class="tile" href="#/item/' + esc(it.id) + '">';
+      return open +
         '<div class="tile-media">' +
           itemThumb(it) +
           (it.favorite ? '<span class="tile-fav">★</span>' : '') +
@@ -1640,11 +1730,12 @@
           (it.rating ? '<span class="tile-rating">' + it.rating + '</span>' : '') +
           (it.laundry && !it.donate ? '<span class="tile-badge wash">🧺 in de was</span>' : '') +
           (!it.name ? '<span class="tile-badge">nog invullen</span>' : '') +
+          (vandaag ? '<span class="tile-vink">✓</span>' : '') +
         '</div>' +
         '<div class="tile-body">' +
           '<span class="tile-name">' + esc(it.name || 'Naamloos') + '</span>' +
           '<span class="tile-meta">' + esc(cat.label) + colorDots(it.colors) + '</span>' +
-        '</div></a>';
+        '</div>' + (vinken ? '</button>' : '</a>');
     }).join('');
   }
 
@@ -1681,6 +1772,7 @@
       (it.lastWorn ? ' · laatst ' + formatDate(it.lastWorn) : ''));
     if (it.price != null) rows += metaRow('Prijs', euro(it.price));
     rows += metaRow('Cijfer van Askim', it.rating ? it.rating + ' / 10' : 'nog geen cijfer');
+    if (it.askimWish) rows += metaRow('Wenslijst', '💖 Askim ziet je dit graag dragen');
 
     // Meer dan één foto? Dan een strookje eronder om doorheen te bladeren.
     var gallery = ids.length > 1
@@ -1722,6 +1814,9 @@
 
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(it, 'rate-item') +
+        briefje(it, 'note-item') +
+        '<button class="btn btn-secondary btn-block" data-act="wish-item" data-id="' + esc(it.id) + '">' +
+          (it.askimWish ? '💖 Staat op Askims wenslijst' : '🤍 Op Askims wenslijst zetten') + '</button>' +
         (!it.donate
           ? (it.laundry
               ? '<button class="btn btn-secondary btn-block" data-act="unlaundry-item" data-id="' + esc(it.id) + '">🧺 Uit de was halen</button>'
@@ -1782,6 +1877,23 @@
     return '<div class="rate-row">' + buttons + '</div>' +
       (obj.rating ? '<button type="button" class="btn btn-ghost btn-block" data-act="' + act + '" ' +
         'data-id="' + esc(obj.id) + '" data-val="">Cijfer wissen</button>' : '');
+  }
+
+  /* Een briefje van Askim bij haar cijfer: één regel waarom ze het leuk vindt.
+     Het staat bij het cijfer op het detailscherm, niet in de beoordeelkaart —
+     die blijft één ding tegelijk vragen. */
+  function briefje(obj, act) {
+    var tekst = obj.askimNote || '';
+    return '<div class="briefje">' +
+      (tekst ? '<p class="briefje-tekst">💬 ' + esc(tekst) + '</p>' : '') +
+      '<div class="briefje-rij">' +
+        '<input class="input briefje-in" type="text" maxlength="140" ' +
+          'placeholder="Briefje van Askim (optioneel)" value="' + esc(tekst) + '" ' +
+          'data-briefje="' + esc(obj.id) + '" autocomplete="off">' +
+        '<button type="button" class="btn btn-secondary" data-act="' + act + '" ' +
+          'data-id="' + esc(obj.id) + '">Bewaren</button>' +
+      '</div>' +
+    '</div>';
   }
 
   /* ─────────────────────────── Kledingstuk-formulier ─────────────────────── */
@@ -2122,6 +2234,7 @@
 
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(o, 'rate-outfit') +
+        briefje(o, 'note-outfit') +
 
         '<h3 class="section-title">Mappen</h3>' +
         (mappen.length
@@ -2148,6 +2261,7 @@
             '</div>') +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/outfit/' + esc(o.id) + '/edit">Bewerken</a>' +
+          '<button class="btn btn-secondary" data-act="share-outfit" data-id="' + esc(o.id) + '">📤 Delen</button>' +
           '<button class="btn btn-secondary" data-act="duplicate-outfit" data-id="' + esc(o.id) + '">Dupliceren</button>' +
           '<button class="btn btn-danger" data-act="delete-outfit" data-id="' + esc(o.id) + '">Verwijderen</button>' +
         '</div>' +
@@ -2360,8 +2474,15 @@
     }
 
     var banen = STYLE_LANES.map(laneHtml).join('');
+    var graden = weerOp(todayISO());
+    var voorstel = seizoenBijGraden(graden);
     return '' +
       '<div class="style-top">' +
+        (graden !== null && voorstel !== state.stylistSeason
+          ? '<button type="button" class="weer-tip" data-act="style-season" data-val="' + voorstel + '">' +
+              '🌡️ Het is vandaag ' + graden + '° — kleed je voor ' +
+              esc((seasonMap[voorstel] || {}).label || voorstel).toLowerCase() + '</button>'
+          : '') +
         '<div class="chips scroll-x">' +
           chipRow(SEASONS, state.stylistSeason, 'style-season', { allLabel: 'Heel jaar' }) +
         '</div>' +
@@ -2764,16 +2885,10 @@
       '</div>' +
       card +
 
-      (top.length
-        ? '<h3 class="section-title">Jouw hoogste cijfers</h3>' +
-          '<div class="grid grid-small">' + top.map(function (it) {
-            return '<a class="tile" href="#/item/' + esc(it.id) + '">' +
-              '<div class="tile-media">' + itemThumb(it) +
-                '<span class="tile-rating">' + it.rating + '</span></div>' +
-              '<div class="tile-body"><span class="tile-name">' + esc(it.name || 'Naamloos') + '</span></div>' +
-            '</a>';
-          }).join('') + '</div>'
-        : '') +
+      duelBlok() +
+      podiumBlok(top) +
+      wenslijstBlok() +
+      eensBlok() +
 
       '<h3 class="section-title">Jouw outfits (' + hers.length + ')</h3>' +
       (hers.length
@@ -2792,6 +2907,117 @@
         'geen bestand nodig.</p>' +
       '<button class="btn btn-primary btn-block" data-act="share-choices">📋 Keuzes kopiëren als code</button>' +
       '<button class="btn btn-ghost btn-block" data-act="paste-choices">Keuzes plakken</button>' +
+    '</div>';
+  }
+
+  /* ── Wat zou jij aandoen? ──
+     Twee outfits naast elkaar; kiezen is makkelijker dan een cijfer geven.
+     De winnaar krijgt een punt, en dat punt telt gewoon door naar haar cijfer:
+     wie vaak wint klimt, wie verliest zakt. Zo hoeft de rest van de app niets
+     van dit spelletje te weten. */
+  function duelPaar() {
+    var pool = state.outfits.filter(function (o) {
+      return o.itemIds.length || coverImageOf(o);
+    });
+    if (pool.length < 2) return null;
+    if (state.duel && state.duel.length === 2 &&
+        getOutfit(state.duel[0]) && getOutfit(state.duel[1])) {
+      return state.duel.map(getOutfit);
+    }
+    // Twee verschillende, met een voorkeur voor outfits die nog weinig punten
+    // hebben — anders zie je steeds dezelfde twee.
+    var gesorteerd = pool.slice().sort(function (a, b) {
+      return (a.duelWins || 0) - (b.duelWins || 0) || Math.random() - 0.5;
+    });
+    var kandidaten = gesorteerd.slice(0, Math.max(2, Math.ceil(gesorteerd.length / 2)));
+    var eerste = kandidaten[Math.floor(Math.random() * kandidaten.length)];
+    var rest = pool.filter(function (o) { return o.id !== eerste.id; });
+    var tweede = rest[Math.floor(Math.random() * rest.length)];
+    state.duel = [eerste.id, tweede.id];
+    return [eerste, tweede];
+  }
+
+  function duelBlok() {
+    var paar = duelPaar();
+    if (!paar) return '';
+    return '<h3 class="section-title">Wat zou jij aandoen?</h3>' +
+      '<p class="hint block">Tik de outfit aan die jij het mooist vindt. Kiezen mag ook ' +
+        'zonder cijfer — de winnaar klimt vanzelf.</p>' +
+      '<div class="duel">' + paar.map(function (o) {
+        return '<button type="button" class="duel-kaart" data-act="duel-kies" data-id="' + esc(o.id) + '">' +
+          outfitBeeld(o, 'collage duel-beeld') +
+          '<span class="duel-naam">' + esc(o.name || 'Naamloze outfit') + '</span>' +
+          (o.duelWins ? '<span class="duel-punten">' + o.duelWins + '× gekozen</span>' : '') +
+        '</button>';
+      }).join('') +
+      '<span class="duel-of">of</span></div>' +
+      '<button class="btn btn-ghost btn-block" data-act="duel-ander">Twee andere laten zien</button>';
+  }
+
+  /* ── Podium: haar drie hoogste cijfers ── */
+  function podiumBlok(top) {
+    var drie = top.slice(0, 3);
+    if (drie.length < 3) {
+      return drie.length
+        ? '<h3 class="section-title">Jouw hoogste cijfers</h3>' +
+          '<div class="grid grid-small">' + drie.map(hoogTegel).join('') + '</div>'
+        : '';
+    }
+    // Volgorde op het podium: tweede, eerste, derde.
+    var orde = [[drie[1], 2], [drie[0], 1], [drie[2], 3]];
+    return '<h3 class="section-title">Jouw top 3</h3>' +
+      '<div class="podium">' + orde.map(function (paar) {
+        var it = paar[0], plek = paar[1];
+        return '<a class="podium-plek plek-' + plek + '" href="#/item/' + esc(it.id) + '">' +
+          '<span class="podium-medaille">' + (plek === 1 ? '🥇' : plek === 2 ? '🥈' : '🥉') + '</span>' +
+          itemThumb(it, 'podium-foto') +
+          '<span class="podium-naam">' + esc(it.name || 'Naamloos') + '</span>' +
+          '<span class="podium-cijfer">' + it.rating + '</span>' +
+        '</a>';
+      }).join('') + '</div>';
+  }
+
+  function hoogTegel(it) {
+    return '<a class="tile" href="#/item/' + esc(it.id) + '">' +
+      '<div class="tile-media">' + itemThumb(it) +
+        '<span class="tile-rating">' + it.rating + '</span></div>' +
+      '<div class="tile-body"><span class="tile-name">' + esc(it.name || 'Naamloos') + '</span></div>' +
+    '</a>';
+  }
+
+  /* ── Wenslijst: wat zij hem graag ziet dragen of kopen ── */
+  function wishItems() {
+    return state.items.filter(function (i) { return i.askimWish && !i.donate; });
+  }
+
+  function wenslijstBlok() {
+    var lijst = wishItems();
+    return '<h3 class="section-title">Jouw wenslijst (' + lijst.length + ')</h3>' +
+      (lijst.length
+        ? '<div class="grid grid-small">' + lijst.map(function (it) {
+            return '<a class="tile" href="#/item/' + esc(it.id) + '">' +
+              '<div class="tile-media">' + itemThumb(it) +
+                '<span class="tile-fav wens">💖</span></div>' +
+              '<div class="tile-body"><span class="tile-name">' + esc(it.name || 'Naamloos') + '</span></div>' +
+            '</a>';
+          }).join('') + '</div>'
+        : '<p class="hint block">Zet stukken die je hem graag ziet dragen op je wenslijst — ' +
+          'de knop staat op het scherm van elk kledingstuk.</p>');
+  }
+
+  /* ── Waar jullie het over eens zijn ── */
+  function eensBlok() {
+    var eens = state.items.filter(function (i) {
+      return !i.donate && i.favorite && (i.rating || 0) >= 8;
+    });
+    if (!eens.length) return '';
+    return '<div class="eens-kaart">' +
+      '<span class="eens-hart">💞</span>' +
+      '<b>Jullie zijn het eens over ' + plural(eens.length, 'stuk', 'stukken') + '</b>' +
+      '<span>Zijn favoriet én van jou een 8 of hoger.</span>' +
+      '<div class="eens-rij">' + eens.slice(0, 6).map(function (it) {
+        return '<a class="eens-mini" href="#/item/' + esc(it.id) + '">' + itemThumb(it, 'eens-foto') + '</a>';
+      }).join('') + '</div>' +
     '</div>';
   }
 
@@ -2874,6 +3100,56 @@
           '</div>' +
         '</div>';
       }).join('') + '</div></div>';
+  }
+
+  /* ── Opruimen ──
+     Wat heb je een jaar niet aangehad? Per stuk drie knoppen, zodat je in één
+     doorloop de kast doorneemt zonder alles apart te openen. */
+  var STOF_DAGEN = 365;
+
+  function stoffigeItems() {
+    var grens = Date.now() - STOF_DAGEN * 86400000;
+    return state.items.filter(function (it) {
+      if (bucketOf(it) !== 'kast') return false;
+      if (it.lastWorn) return dateFromISO(it.lastWorn).getTime() < grens;
+      // Nooit gedragen telt pas mee als het stuk zelf al even in de kast ligt.
+      return (it.createdAt || 0) < grens;
+    }).sort(function (a, b) {
+      return (a.lastWorn ? dateFromISO(a.lastWorn).getTime() : 0) -
+             (b.lastWorn ? dateFromISO(b.lastWorn).getTime() : 0);
+    });
+  }
+
+  function viewOpruimen() {
+    var lijst = stoffigeItems();
+    if (!lijst.length) {
+      return emptyState('🧹', 'Niets stoffigs gevonden',
+        'Alles in je kast heb je het afgelopen jaar aangehad — of het ligt er nog geen jaar. ' +
+        'Kom hier over een tijdje nog eens kijken.',
+        '<a class="btn btn-primary" href="#/kast">Naar de kast</a>');
+    }
+    return '<div class="page">' +
+      '<p class="hint block">' + plural(lijst.length, 'stuk heeft', 'stukken hebben') +
+        ' een jaar lang stilgehangen. Loop ze door: houden, wassen of weggeven.</p>' +
+      '<div class="list">' + lijst.map(function (it) {
+        var cat = catMap[it.category] || catMap.overig;
+        return '<div class="list-item column" data-opruim="' + esc(it.id) + '">' +
+          '<a class="list-line" href="#/item/' + esc(it.id) + '">' +
+            itemThumb(it, 'list-thumb') +
+            '<span class="list-text"><b>' + esc(it.name || 'Naamloos') + '</b>' +
+            '<span class="list-sub">' + esc(cat.label) + ' · ' +
+              (it.lastWorn ? 'laatst ' + formatDate(it.lastWorn) : 'nooit gedragen') +
+              (it.rating ? ' · cijfer ' + it.rating : '') + '</span></span>' +
+            '<span class="chev">›</span>' +
+          '</a>' +
+          '<div class="row-actions tight">' +
+            '<button class="btn btn-secondary" data-act="opruim-houden" data-id="' + esc(it.id) + '">Houden</button>' +
+            '<button class="btn btn-secondary" data-act="opruim-wassen" data-id="' + esc(it.id) + '">🧺 Wassen</button>' +
+            '<button class="btn btn-ghost" data-act="opruim-doneren" data-id="' + esc(it.id) + '">🎁 Weggeven</button>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>' +
+    '</div>';
   }
 
   /* ─────────────────────────────── Kiezers ───────────────────────────────── */
@@ -3145,6 +3421,7 @@
       '<p class="hint block">Kleding die je niet meer draagt leg je op de doneerstapel. ' +
         'Die verdwijnt uit je kast, maar blijft bewaard tot je hem echt weggeeft.</p>' +
       '<a class="btn btn-secondary btn-block" href="#/doneren">🎁 Doneerstapel (' + donate.length + ')</a>' +
+      '<a class="btn btn-secondary btn-block" href="#/opruimen">🧹 Kast opruimen (' + stoffigeItems().length + ')</a>' +
 
       (bars ? '<h3 class="section-title">Per categorie</h3><div class="bars">' + bars + '</div>' : '') +
 
@@ -3166,6 +3443,9 @@
           }).join('');
         return '<h3 class="section-title">Per kleur</h3><div class="bars">' + rows + '</div>';
       })() +
+
+      maandKaart() +
+      merkenBlok(items) +
 
       (mostWorn.length
         ? '<h3 class="section-title">Meest gedragen</h3><div class="list">' + mostWorn.map(function (it) {
@@ -3208,6 +3488,68 @@
 
       '<p class="footer-note">Mijn Kledingkast · alles blijft lokaal op je eigen apparaat</p>' +
     '</div>';
+  }
+
+  /* ── Deze maand in één kaartje ── */
+  var MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni',
+                 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+
+  function maandKaart() {
+    var nu = new Date();
+    var prefix = nu.getFullYear() + '-' + pad(nu.getMonth() + 1);
+    var keer = 0;
+    var perStuk = {};
+    state.items.forEach(function (it) {
+      (it.wearDates || []).forEach(function (d) {
+        if (String(d).indexOf(prefix) !== 0) return;
+        keer++;
+        perStuk[it.id] = (perStuk[it.id] || 0) + 1;
+      });
+    });
+    if (!keer) return '';
+    var besteId = Object.keys(perStuk).sort(function (a, b) { return perStuk[b] - perStuk[a]; })[0];
+    var beste = getItem(besteId);
+    var outfitsDeze = state.outfits.filter(function (o) {
+      return (o.wearDates || []).some(function (d) { return String(d).indexOf(prefix) === 0; });
+    }).length;
+
+    return '<div class="maand-kaart">' +
+      '<span class="maand-kop">' + esc(MAANDEN[nu.getMonth()]) + '</span>' +
+      '<b>' + plural(keer, 'keer', 'keer') + ' iets aangehad</b>' +
+      '<span class="maand-sub">' +
+        (outfitsDeze ? plural(outfitsDeze, 'outfit', 'outfits') + ' gedragen' : 'nog geen hele outfit genoteerd') +
+      '</span>' +
+      (beste
+        ? '<a class="maand-top" href="#/item/' + esc(beste.id) + '">' +
+            itemThumb(beste, 'maand-foto') +
+            '<span class="list-text"><b>' + esc(beste.name || 'Naamloos') + '</b>' +
+            '<span class="list-sub">favoriet deze maand · ' +
+              plural(perStuk[besteId], 'keer', 'keer') + '</span></span>' +
+            '<span class="chev">›</span>' +
+          '</a>'
+        : '') +
+    '</div>';
+  }
+
+  /* ── Staafjes per merk ── */
+  function merkenBlok(items) {
+    var perMerk = {};
+    items.forEach(function (i) {
+      var m = (i.brand || '').trim();
+      if (!m) return;
+      perMerk[m] = (perMerk[m] || 0) + 1;
+    });
+    var namen = Object.keys(perMerk).sort(function (a, b) {
+      return perMerk[b] - perMerk[a] || a.localeCompare(b, 'nl');
+    });
+    if (!namen.length) return '';
+    var top = perMerk[namen[0]];
+    return '<h3 class="section-title">Per merk</h3><div class="bars">' +
+      namen.slice(0, 10).map(function (m) {
+        return '<div class="bar-row"><span class="bar-label">' + esc(m) + '</span>' +
+          '<span class="bar"><i style="width:' + Math.round(perMerk[m] / top * 100) + '%"></i></span>' +
+          '<span class="bar-num">' + perMerk[m] + '</span></div>';
+      }).join('') + '</div>';
   }
 
   function stat(num, label) {
@@ -3273,6 +3615,8 @@
     if (r.outfitRatings) regels.push(plural(r.outfitRatings, 'cijfer', 'cijfers') + ' bij outfits');
     if (r.outfitsAdded) regels.push(plural(r.outfitsAdded, 'nieuwe outfit', 'nieuwe outfits'));
     if (r.donated) regels.push(plural(r.donated, 'stuk', 'stukken') + ' op de doneerstapel');
+    if (r.briefjes) regels.push(plural(r.briefjes, 'briefje', 'briefjes'));
+    if (r.wensen) regels.push(plural(r.wensen, 'wens', 'wensen'));
     return '<div class="deel-uitslag">' +
       '<button type="button" class="deel-x" data-act="deel-sluit" aria-label="Sluiten">×</button>' +
       '<b>' + (regels.length ? '✓ Keuzes overgenomen' : 'Er viel niets over te nemen') + '</b>' +
@@ -3297,7 +3641,8 @@
     }
     var payload = {
       app: 'kledingkast', version: 2, exportedAt: new Date().toISOString(),
-      items: state.items, outfits: state.outfits, folders: state.folders, images: out
+      items: state.items, outfits: state.outfits, folders: state.folders, images: out,
+      weer: alleWeer()      // temperaturen per dag; klein, dus gewoon mee
     };
     return new Blob([JSON.stringify(payload)], { type: 'application/json' });
   }
@@ -3322,6 +3667,107 @@
 
   /* Via het deelmenu van de telefoon: rechtstreeks naar WhatsApp of AirDrop,
      zonder eerst iets in Bestanden te parkeren. */
+  /* ── Een outfit als plaatje ──
+     De foto's staan als blobs in de database; die tekenen we op een canvas
+     met de naam eronder, zodat je hem gewoon in een berichtje kunt plakken. */
+  var KAART_B = 1080, KAART_H = 1350;
+
+  function laadBeeld(url) {
+    return new Promise(function (klaar) {
+      if (!url) { klaar(null); return; }
+      var img = new Image();
+      img.onload = function () { klaar(img); };
+      img.onerror = function () { klaar(null); };
+      img.src = url;
+    });
+  }
+
+  /* Vullend tekenen, midden uitgesneden — anders worden staande foto's
+     uitgerekt. */
+  function tekenVullend(ctx, img, x, y, b, h) {
+    var schaal = Math.max(b / img.width, h / img.height);
+    var bb = img.width * schaal, hh = img.height * schaal;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, b, h);
+    ctx.clip();
+    ctx.drawImage(img, x + (b - bb) / 2, y + (h - hh) / 2, bb, hh);
+    ctx.restore();
+  }
+
+  async function outfitPlaatje(o) {
+    var canvas = document.createElement('canvas');
+    canvas.width = KAART_B;
+    canvas.height = KAART_H;
+    var ctx = canvas.getContext('2d');
+    var papier = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#f7f4ef';
+    var inkt = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#1f1c19';
+    ctx.fillStyle = papier;
+    ctx.fillRect(0, 0, KAART_B, KAART_H);
+
+    var rand = 60, boven = 60, vak = KAART_B - rand * 2, hoogte = 1000;
+    var eigen = coverImageOf(o);
+    if (eigen) {
+      var img = await laadBeeld(await imageUrl(eigen, 'full'));
+      if (img) tekenVullend(ctx, img, rand, boven, vak, hoogte);
+    } else {
+      var stukken = o.itemIds.map(getItem).filter(Boolean).slice(0, 4);
+      var kolommen = stukken.length > 1 ? 2 : 1;
+      var rijen = Math.ceil(stukken.length / kolommen) || 1;
+      var cb = (vak - (kolommen - 1) * 12) / kolommen;
+      var ch = (hoogte - (rijen - 1) * 12) / rijen;
+      for (var i = 0; i < stukken.length; i++) {
+        var x = rand + (i % kolommen) * (cb + 12);
+        var y = boven + Math.floor(i / kolommen) * (ch + 12);
+        ctx.fillStyle = 'rgba(128,128,128,.12)';
+        ctx.fillRect(x, y, cb, ch);
+        var cover = coverImageOf(stukken[i]);
+        var deel = cover ? await laadBeeld(await imageUrl(cover, 'full')) : null;
+        if (deel) tekenVullend(ctx, deel, x, y, cb, ch);
+      }
+    }
+
+    ctx.fillStyle = inkt;
+    ctx.textAlign = 'center';
+    ctx.font = '600 62px ui-serif, Georgia, serif';
+    ctx.fillText(o.name || 'Naamloze outfit', KAART_B / 2, boven + hoogte + 90, vak);
+    ctx.globalAlpha = 0.55;
+    ctx.font = '400 34px -apple-system, Segoe UI, Roboto, sans-serif';
+    var onder = plural(o.itemIds.length, 'kledingstuk', 'kledingstukken') +
+      (o.rating ? '  ·  ' + o.rating + '/10 van Askim' : '');
+    ctx.fillText(onder, KAART_B / 2, boven + hoogte + 148, vak);
+    ctx.globalAlpha = 1;
+
+    return new Promise(function (klaar) {
+      canvas.toBlob(function (blob) { klaar(blob); }, 'image/jpeg', 0.9);
+    });
+  }
+
+  async function deelOutfitPlaatje(id) {
+    var o = getOutfit(id);
+    if (!o) return;
+    toonBezig('Plaatje maken…');
+    var blob = null;
+    try { blob = await outfitPlaatje(o); } catch (err) { blob = null; }
+    verbergBezig();
+    if (!blob) { toast('Plaatje maken lukte niet'); return; }
+    var naam = (o.name || 'outfit').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.jpg';
+
+    if (typeof File === 'function' && navigator.canShare) {
+      var file = new File([blob], naam, { type: 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: o.name || 'Outfit' });
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+        }
+      }
+    }
+    downloadBlob(blob, naam);
+    toast('Plaatje gedownload');
+  }
+
   async function shareBackup() {
     toast('Back-up voorbereiden…');
     var blob = await buildBackupBlob();
@@ -3386,14 +3832,18 @@
       app: 'kledingkast', kind: 'keuzes', version: 2,
       madeAt: new Date().toISOString(),
       items: state.items
-        .filter(function (i) { return i.rating != null || i.donate; })
-        .map(function (i) { return { id: i.id, rating: i.rating, donate: !!i.donate }; }),
+        .filter(function (i) { return i.rating != null || i.donate || i.askimWish || i.askimNote; })
+        .map(function (i) {
+          return { id: i.id, rating: i.rating, donate: !!i.donate,
+                   askimNote: i.askimNote || '', askimWish: !!i.askimWish };
+        }),
       outfits: state.outfits
         .filter(function (o) { return o.author === 'askim' || o.rating != null; })
         .map(function (o) {
           return {
             id: o.id, name: o.name, itemIds: o.itemIds, occasion: o.occasion,
             seasons: o.seasons, notes: o.notes, author: o.author, rating: o.rating,
+            askimNote: o.askimNote || '', duelWins: o.duelWins || 0,
             createdAt: o.createdAt, updatedAt: o.updatedAt
           };
         })
@@ -3429,6 +3879,7 @@
     if (mode === 'merge') {
       toast('Keuzes van Askim overnemen…');
       var res = await mergeAskim(data);
+      state.deelResultaat = res;
       render();
       toast(res.ratings + ' cijfers en ' + plural(res.outfits, 'outfit', 'outfits') + ' overgenomen');
       return;
@@ -3444,8 +3895,12 @@
     });
     await KastDB.putMany(KastDB.IMAGES, images);
     await KastDB.putMany(KastDB.ITEMS, data.items.map(normalizeItem));
-    await KastDB.putMany(KastDB.OUTFITS, data.outfits || []);
+    await KastDB.putMany(KastDB.OUTFITS, (data.outfits || []).map(normalizeOutfit));
     await KastDB.putMany(KastDB.FOLDERS, folders);
+    if (data.weer && typeof data.weer === 'object') {
+      weerCache = data.weer;
+      try { localStorage.setItem(WEER_KEY, JSON.stringify(data.weer)); } catch (e) { /* privémodus */ }
+    }
     images.forEach(function (rec) { forgetImage(rec.id); });
     await loadAll();
     render();
@@ -3457,6 +3912,7 @@
   async function mergeAskim(data) {
     var ratings = 0, outfitsAdded = 0;
     var itemRatings = 0, outfitRatings = 0, donated = 0, unknown = 0;
+    var briefjes = 0, wensen = 0;
 
     for (var i = 0; i < data.items.length; i++) {
       var src = normalizeItem(data.items[i]);
@@ -3467,6 +3923,8 @@
       var changed = false;
       if (src.rating != null && src.rating !== mine.rating) { mine.rating = src.rating; changed = true; itemRatings++; }
       if (src.donate && !mine.donate) { mine.donate = true; changed = true; donated++; }
+      if (src.askimNote && src.askimNote !== mine.askimNote) { mine.askimNote = src.askimNote; changed = true; briefjes++; }
+      if (src.askimWish && !mine.askimWish) { mine.askimWish = true; changed = true; wensen++; }
       if (changed) { await saveItem(mine); ratings++; }
     }
 
@@ -3476,12 +3934,23 @@
       var mineOutfit = getOutfit(o.id);
       if (mineOutfit) {
         // Bestaat de outfit al bij mij, dan neem ik alleen haar cijfer over.
+        var veranderd = false;
         if (o.rating != null && o.rating !== mineOutfit.rating) {
           mineOutfit.rating = o.rating;
-          await saveOutfit(mineOutfit);
+          veranderd = true;
           ratings++;
           outfitRatings++;
         }
+        if (o.askimNote && o.askimNote !== mineOutfit.askimNote) {
+          mineOutfit.askimNote = o.askimNote;
+          veranderd = true;
+          briefjes++;
+        }
+        if (o.duelWins && o.duelWins !== mineOutfit.duelWins) {
+          mineOutfit.duelWins = o.duelWins;
+          veranderd = true;
+        }
+        if (veranderd) await saveOutfit(mineOutfit);
         continue;
       }
       if (o.author !== 'askim') continue;
@@ -3509,7 +3978,8 @@
     return {
       ratings: ratings, outfits: outfitsAdded,
       itemRatings: itemRatings, outfitRatings: outfitRatings,
-      outfitsAdded: outfitsAdded, donated: donated, unknown: unknown
+      outfitsAdded: outfitsAdded, donated: donated, unknown: unknown,
+      briefjes: briefjes, wensen: wensen
     };
   }
 
@@ -3531,6 +4001,29 @@
     }
     kopie.imageIds = nieuwe;
     if (!kopie.coverImageId) kopie.coverImageId = nieuwe[0] || null;
+  }
+
+  /* Het briefje staat in een los invoerveld naast de knop; we zoeken het op
+     via het id, zodat er meerdere op één scherm mogen staan. */
+  async function bewaarBriefje(btn, zoek) {
+    var id = btn.getAttribute('data-id');
+    var veld = document.querySelector('[data-briefje="' + id + '"]');
+    var obj = zoek(id);
+    if (!veld || !obj) return;
+    obj.askimNote = veld.value.trim().slice(0, 140);
+    if (zoek === getItem) await saveItem(obj); else await saveOutfit(obj);
+    render();
+    toast(obj.askimNote ? 'Briefje bewaard' : 'Briefje weggehaald');
+  }
+
+  /* De afgehandelde rij schuift weg voordat het scherm opnieuw getekend
+     wordt; anders knippert de hele lijst bij elke keuze. */
+  function verdwijnRij(btn, bericht) {
+    var rij = btn.closest('[data-opruim]');
+    toast(bericht);
+    if (!rij || prefersReduced()) { render(); return; }
+    rij.classList.add('weg');
+    setTimeout(function () { render(); }, 260);
   }
 
   /* ─────────────────────────────── Dialoogje ─────────────────────────────── */
@@ -3600,12 +4093,25 @@
     'pick-photo': function () { els.filePhoto.click(); },
 
     'toggle-filters': function () { state.filtersOpen = !state.filtersOpen; render(); },
+    'wear-mode': function () { state.wearMode = !state.wearMode; render(); },
+    /* Aanvinkmodus: één tik noteert de dag van vandaag, nog een tik draait
+       hem terug. Zo hoef je voor een gewone dag geen zes schermen door. */
+    'wear-tile': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      var aan = !wornOn(it, todayISO());
+      if (aan) { await markItemWorn(it); confettiOp(btn); }
+      else await unmarkItemWorn(it);
+      refreshGrid();
+      toast(aan ? esc2(it.name || 'Naamloos') + ' vandaag gedragen' : 'Toch niet gedragen');
+    },
     'filter-cat': function (btn) { state.filters.cat = btn.getAttribute('data-val'); render(); },
     'filter-season': function (btn) { state.filters.season = btn.getAttribute('data-val'); render(); },
     'filter-color': function (btn) { state.filters.color = btn.getAttribute('data-val'); render(); },
     'filter-sort': function (btn) { state.filters.sort = btn.getAttribute('data-val'); render(); },
     'filter-fav': function () { state.filters.fav = !state.filters.fav; render(); },
     'filter-unworn': function () { state.filters.unworn = !state.filters.unworn; render(); },
+    'filter-wish': function () { state.filters.wish = !state.filters.wish; render(); },
     'filter-vak': function (btn) {
       var val = btn.getAttribute('data-val');
       state.filters.vak = state.filters.vak === val ? 'kast' : val;
@@ -3614,7 +4120,7 @@
     'filter-tag': function (btn) { state.filters.tag = btn.getAttribute('data-val'); render(); },
     'filter-reset': function () {
       state.filters = { q: state.filters.q, cat: '', season: '', color: '', tag: '',
-                        fav: false, unworn: false, vak: 'kast', sort: 'recent' };
+                        fav: false, unworn: false, wish: false, vak: 'kast', sort: 'recent' };
       render();
     },
 
@@ -3921,6 +4427,17 @@
     'week-next': function () { state.weekOffset++; render(); },
     'week-today': function () { state.weekOffset = 0; render(); },
     'plan-day': function (btn) { openPlanSheet(btn.getAttribute('data-date')); },
+    'zet-weer': function (btn) {
+      var date = btn.getAttribute('data-date');
+      var veld = document.getElementById('weerIn');
+      if (!veld) return;
+      var ruw = veld.value.trim();
+      zetWeer(date, ruw === '' ? null : parseFloat(ruw));
+      closeOverlay();
+      render();
+      var t = weerOp(date);
+      toast(t === null ? 'Temperatuur weggehaald' : 'Genoteerd: ' + t + '°');
+    },
     'plan-pick': async function (btn) {
       var date = btn.getAttribute('data-date');
       var o = getOutfit(btn.getAttribute('data-id'));
@@ -4036,10 +4553,69 @@
 
     'export': function () { exportBackup(); },
     'share-backup': function () { shareBackup(); },
+    'share-outfit': function (btn) { deelOutfitPlaatje(btn.getAttribute('data-id')); },
     'import': function () { els.fileImport.click(); },
     'share-choices': function () { openShareCode(); },
     'paste-choices': function () { openPasteCode(); },
     'ga-wasmand': function () { state.filters.vak = 'laundry'; go('#/kast'); },
+
+    /* "Houden" verandert niets aan het stuk maar zet de teller op vandaag,
+       zodat het niet volgende week weer bovenaan de opruimlijst staat. */
+    'opruim-houden': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.keptAt = Date.now();
+      it.createdAt = Date.now();
+      if (it.lastWorn) it.lastWorn = todayISO();
+      await saveItem(it);
+      verdwijnRij(btn, 'Blijft in de kast');
+    },
+    'opruim-wassen': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.laundry = true;
+      await saveItem(it);
+      verdwijnRij(btn, 'In de wasmand');
+    },
+    'opruim-doneren': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.donate = true;
+      it.laundry = false;
+      await saveItem(it);
+      verdwijnRij(btn, 'Op de doneerstapel');
+    },
+
+    'note-item': async function (btn) { await bewaarBriefje(btn, getItem); },
+    'note-outfit': async function (btn) { await bewaarBriefje(btn, getOutfit); },
+    'wish-item': async function (btn) {
+      var it = getItem(btn.getAttribute('data-id'));
+      if (!it) return;
+      it.askimWish = !it.askimWish;
+      if (it.askimWish) sterrenBui(btn);
+      await saveItem(it);
+      render();
+      toast(it.askimWish ? 'Op de wenslijst' : 'Van de wenslijst af');
+    },
+    'duel-kies': async function (btn) {
+      var winnaar = getOutfit(btn.getAttribute('data-id'));
+      if (!winnaar || !state.duel) return;
+      var verliezer = getOutfit(state.duel.filter(function (id) { return id !== winnaar.id; })[0]);
+      winnaar.duelWins = (winnaar.duelWins || 0) + 1;
+      // Winnen tilt het cijfer op, verliezen laat het zakken — maar nooit
+      // buiten 1 t/m 10, en een leeg cijfer begint in het midden.
+      winnaar.rating = Math.min(10, (winnaar.rating || 6) + 1);
+      await saveOutfit(winnaar);
+      if (verliezer) {
+        verliezer.rating = Math.max(1, (verliezer.rating || 6) - 1);
+        await saveOutfit(verliezer);
+      }
+      confettiOp(btn);
+      state.duel = null;
+      render();
+      toast('"' + (winnaar.name || 'Naamloze outfit') + '" wint');
+    },
+    'duel-ander': function () { state.duel = null; render(); },
     'sluit-en-ga': function (btn) { closeOverlay(); go(btn.getAttribute('data-href')); },
     'deel-sluit': function () { state.deelResultaat = null; render(); },
     'toon-code': function (btn) {

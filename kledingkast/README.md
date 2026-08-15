@@ -69,6 +69,9 @@ internet.
 **Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
   gelegenheid, seizoen en notities.
+- **Delen als plaatje.** De knop 📤 op een outfit tekent haar foto (of de
+  collage van haar kledingstukken) met de naam eronder op één afbeelding, en
+  opent het deelmenu. Kan de browser dat niet, dan wordt het een download.
 - Een outfit mag ook **een eigen foto** hebben — een kiekje van de hele look in
   de paskamer of voor de spiegel. Heeft hij die, dan zie je die foto overal
   terug in plaats van het collagetje van losse stukken.
@@ -111,14 +114,29 @@ internet.
 - Onder **Meer** zie je hoeveel je hebt, de verdeling per categorie en per
   kleur, wat je het meest draagt en wat nog nooit aan is geweest.
 
+**Opruimen en bijhouden**
+- Onder **Meer → Kast opruimen** staat wat je een jaar niet hebt aangehad. Per
+  stuk drie knoppen: houden, in de was, of weggeven. "Houden" zet de klok
+  opnieuw, zodat het niet volgende week weer bovenaan staat.
+- Met de knop **✓** in de zoekbalk van je kast zet je de aanvinkmodus aan: dan
+  noteert één tik op een tegel dat je dat vandaag droeg, en een tweede tik
+  draait het terug. Handig voor een gewone dag waarop je geen hele outfit
+  vastlegt.
+- Bij een dag in de agenda vul je zelf de **temperatuur** in. De stylist ziet
+  die van vandaag en stelt het bijpassende seizoen voor — één tik en je banen
+  staan goed. De app kan niet op internet, dus een verwachting ophalen gaat
+  niet; dit is met opzet handwerk.
+
 **Meer**
 - Bovenaan een kaartje dat in één zin zegt hoe je ervoor staat.
 - Daaronder **Snel naar**: acht knoppen naar alles wat de app te bieden heeft,
   met de aantallen erbij. Ook naar de schermen die geen eigen tabblad hebben —
   de mappen, de agenda, de wasmand en de doneerstapel. De wasmandknop zet het
   vak meteen goed, zodat je daar niet zelf een filter voor hoeft te zoeken.
-- Daarna de cijfers, de staafjes per categorie en per kleur, het thema, de
-  deelcode, de back-up en het opruimen.
+- Een kaartje voor **deze maand**: hoe vaak je iets aanhad, hoeveel hele
+  outfits dat waren en welk stuk je favoriet van de maand is.
+- Daarna de cijfers, de staafjes per categorie, per kleur en **per merk**, het
+  thema, de deelcode, de back-up en het opruimen.
 - Op een kledingstuk laat **"Combineer je met"** zien wat je er in de praktijk
   het vaakst bij draagt, afgeleid uit je outfits.
 
@@ -149,7 +167,21 @@ Het tabblad **💛 Askim** is haar plek in de app. Daar kan zij:
   app die vanzelf op.
 - **Zelf outfits samenstellen.** Die krijgen het label 💛 Askim, zodat je ziet van
   wie ze zijn. Ze beoordeelt zowel jouw outfits als die van haarzelf.
-- Haar hoogste cijfers en de doneerstapel in één oogopslag bekijken.
+- **Een briefje bij een cijfer.** Op het scherm van een kledingstuk of outfit
+  staat onder het cijfer een regeltje waar ze kwijt kan waaróm — "deze staat je
+  super", "die kraag vind ik niks". Dat briefje reist mee in de deelcode. Het
+  staat met opzet niet in de beoordeelkaart: die vraagt één ding tegelijk.
+- **"Wat zou jij aandoen?"** Twee outfits naast elkaar, tik de mooiste aan.
+  De winnaar klimt een punt in cijfer, de verliezer zakt er een. Zo krijg je
+  cijfers zonder dat iemand een cijfer hoeft te bedenken, en de rest van de app
+  merkt er niets van — het blijft gewoon `rating`.
+- **Haar top 3** staat als podium op haar scherm: zilver, goud, brons, met het
+  hoogste stuk in het midden.
+- **Een wenslijst.** Met 🤍 zet ze een stuk op haar lijstje van dingen die ze
+  hem graag ziet dragen. Jij filtert je kast daarop met de chip 💖 Wenslijst.
+- **Waar jullie het over eens zijn:** een kaartje dat telt bij hoeveel stukken
+  jouw favoriet en haar 8-of-hoger samenvallen.
+- De doneerstapel in één oogopslag bekijken.
 
 Jij sorteert daarna je kast én je outfitlijst op "💛 Cijfer van Askim" om te zien
 wat zij het leukst vindt. Cijfers staan als badge op de tegels en zijn vanaf elk
@@ -367,6 +399,15 @@ ze dan altijd. Vandaar drie stappen:
 
 Test dit met fotoachtige beelden, niet met vlakke kleurvlakken: die laatste zijn
 te makkelijk en lieten precies deze fout door.
+
+Een `<img>` in een fotohouder staat absoluut gepositioneerd. Krijgt zo'n houder
+zelf geen `position`, dan valt de foto terug op de pagina en legt hij zich over
+het halve scherm — klikbaar en al. Elke nieuwe houder hoort dus in de gedeelde
+regel met `.tile-photo` en vrienden.
+
+De temperatuur per dag staat in `localStorage` onder `kledingkast-weer`, niet in
+IndexedDB: het is een handjevol getallen, geen kledingstuk. Hij reist wel mee in
+de back-up, zodat hij een verhuizing overleeft.
 
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`
