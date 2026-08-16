@@ -232,7 +232,7 @@
       laag.appendChild(snipper);
     }
     document.body.appendChild(laag);
-    setTimeout(function () { laag.remove(); }, 1800);
+    setTimeout(function () { laag.remove(); }, 2100);
   }
 
   function confettiOp(el) {
@@ -283,7 +283,7 @@
       doel.classList.remove('tel-pop');
       void doel.offsetWidth;
       doel.classList.add('tel-pop');
-      setTimeout(function () { doel.classList.remove('tel-pop'); }, 440);
+      setTimeout(function () { doel.classList.remove('tel-pop'); }, 540);
     }, 480);
   }
 
@@ -341,7 +341,7 @@
       kloon.remove();
       doel.style.visibility = '';
       els.view.classList.remove('met-vlucht');
-    }, 430);
+    }, 600);
   }
 
   /* ───────────────────────── Cijfers die doorrollen ────────────────────────
@@ -370,7 +370,7 @@
     setTimeout(function () {
       el.removeAttribute('data-oud');
       el.classList.remove('rol-in');
-    }, 420);
+    }, 540);
   }
 
   /* ───────────────────────────── Rimpel bij een tik ──────────────────────── */
@@ -404,7 +404,7 @@
     i.style.top = (ev.clientY - r.top - groot / 2) + 'px';
     laag.appendChild(i);
     document.body.appendChild(laag);
-    setTimeout(function () { laag.remove(); }, 640);
+    setTimeout(function () { laag.remove(); }, 780);
   }
 
   /* ──────────────────────── Sterren bij een favoriet ─────────────────────── */
@@ -462,7 +462,7 @@
     var kaart = opAskim ? document.querySelector('.askim-card') : null;
     if (kaart && !prefersReduced()) {
       kaart.classList.add('weg');
-      await wacht(230);
+      await wacht(300);
     }
     await doeHet();
     render();
@@ -486,7 +486,41 @@
      'systeem' volgt de telefoon; 'licht' en 'donker' overrulen dat. */
 
   var THEME_KEY = 'kledingkast-thema';
+  var STIJL_KEY = 'kledingkast-stijl';
   var WEER_KEY = 'kledingkast-weer';
+
+  /* ── Stijl ──
+     Twee jassen om dezelfde app: "papier" is de warme serif-vormgeving waar we
+     mee begonnen, "apple" leunt tegen iOS aan. Het verschil zit vrijwel helemaal
+     in de tokens bovenin style.css, dus wisselen kost niets en kan altijd terug. */
+  function currentStyle() {
+    try { return localStorage.getItem(STIJL_KEY) === 'apple' ? 'apple' : 'papier'; }
+    catch (e) { return 'papier'; }
+  }
+
+  function setStyle(s) {
+    try {
+      if (s === 'apple') localStorage.setItem(STIJL_KEY, 'apple');
+      else localStorage.removeItem(STIJL_KEY);
+    } catch (e) { /* privémodus: dan geldt de keuze alleen deze sessie */ }
+    applyStyle(s);
+  }
+
+  function applyStyle(s) {
+    var root = document.documentElement;
+    if (s === 'apple') root.setAttribute('data-style', 'apple');
+    else root.removeAttribute('data-style');
+    zetThemeKleur();
+  }
+
+  /* De statusbalk van de telefoon kleurt mee met het papier van de app. */
+  function zetThemeKleur() {
+    var kleur = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (!kleur) return;
+    Array.prototype.forEach.call(document.querySelectorAll('meta[name="theme-color"]'), function (m) {
+      m.setAttribute('content', kleur);
+    });
+  }
 
   /* ── Weer per dag ──
      Handmatig ingevuld: de app kan niet op internet, dus een verwachting
@@ -547,6 +581,8 @@
 
   function applyTheme(t) {
     var root = document.documentElement;
+    // De statusbalk kleurt mee; dat gebeurt na het zetten, onderaan deze functie.
+    setTimeout(zetThemeKleur, 0);
     if (t === 'licht') root.setAttribute('data-theme', 'light');
     else if (t === 'donker') root.setAttribute('data-theme', 'dark');
     else root.removeAttribute('data-theme');
@@ -1009,6 +1045,7 @@
   }
 
   async function saveItem(item) {
+    wisLaneCache();
     item.updatedAt = Date.now();
     await KastDB.put(KastDB.ITEMS, item);
     upsert(state.items, item);
@@ -1349,11 +1386,12 @@
     els.view.classList.add('enter-' + richting);
     enterTimer = setTimeout(function () {
       els.view.classList.remove('enter-in', 'enter-vooruit', 'enter-terug');
-    }, 700);
+    }, 1000);
   }
 
   function render() {
     if (!state.ready) return;
+    wisLaneCache();
     var parts = parseRoute();
     var view = '';
     var top = '';
@@ -1447,7 +1485,7 @@
           icoon.classList.remove('pop');
           void icoon.offsetWidth;
           icoon.classList.add('pop');
-          setTimeout(function () { icoon.classList.remove('pop'); }, 520);
+          setTimeout(function () { icoon.classList.remove('pop'); }, 560);
         }
       }
       if (parts[0] === 'meer') {
@@ -2446,7 +2484,22 @@
      Drie banen boven elkaar — boven, onder, schoenen — waar je zijwaarts
      doorheen bladert. Wat in het midden staat is wat je aanhebt. */
 
+  var laneCache = null;
+
+  /* De banen worden bij het tekenen én bij elke keuze opgevraagd. Eén keer
+     uitrekenen per tekenbeurt scheelt bij een volle kast een hoop werk. */
+  function wisLaneCache() { laneCache = null; }
+
   function laneItems(lane) {
+    laneCache = laneCache || {};
+    var sleutel = lane.key + '|' + state.stylistSeason;
+    if (laneCache[sleutel]) return laneCache[sleutel];
+    var lijst = berekenLaneItems(lane);
+    laneCache[sleutel] = lijst;
+    return lijst;
+  }
+
+  function berekenLaneItems(lane) {
     var seizoen = state.stylistSeason;
     return state.items.filter(function (it) {
       if (lane.cats.indexOf(it.category) === -1) return false;
@@ -2616,22 +2669,34 @@
      Dit loopt met de vinger mee, dus zonder overgang: die zou achterlopen. */
 
   function meetBaan(rail) {
-    var kaarten = rail.querySelectorAll('.rail-card');
     // Past alles al in beeld, dan valt er niets te bladeren en heeft "het
     // midden" geen betekenis. Alles recht dus — anders staat een baan met
     // twee stukken scheef zonder dat je iets gedaan hebt.
     var schuift = rail.scrollWidth > rail.clientWidth + 4;
     var mid = rail.scrollLeft + rail.clientWidth / 2;
     var bereik = (rail.clientWidth / 2) || 1;
-    Array.prototype.forEach.call(kaarten, function (k) {
+
+    // Eerst alles opmeten, dán pas schrijven. Door elkaar heen lezen en
+    // schrijven dwingt de browser bij elke kaart opnieuw de lay-out uit te
+    // rekenen, en dat is precies wat je niet wilt terwijl je vinger beweegt.
+    var kaarten = rail.kaartCache;
+    if (!kaarten || kaarten.length !== rail.children.length) {
+      kaarten = rail.kaartCache = Array.prototype.slice.call(rail.querySelectorAll('.rail-card'));
+    }
+    var n = kaarten.length, i, afstanden = [];
+    for (i = 0; i < n; i++) {
+      var k = kaarten[i];
       var afstand = 0;
       if (schuift) {
         afstand = (k.offsetLeft + k.offsetWidth / 2 - mid) / bereik;
         afstand = Math.max(-1.5, Math.min(1.5, afstand));
       }
-      k.style.setProperty('--sx', afstand.toFixed(3));
-      k.style.setProperty('--d', Math.min(1, Math.abs(afstand)).toFixed(3));
-    });
+      afstanden.push(afstand);
+    }
+    for (i = 0; i < n; i++) {
+      kaarten[i].style.setProperty('--sx', afstanden[i].toFixed(3));
+      kaarten[i].style.setProperty('--d', Math.min(1, Math.abs(afstanden[i])).toFixed(3));
+    }
   }
 
   function volgBaan(rail) {
@@ -2673,7 +2738,7 @@
           'rotate(' + ((n - kaarten.length / 2) * 7).toFixed(1) + 'deg) scale(.16)';
         kloon.style.opacity = '0';
       });
-      setTimeout(function () { kloon.remove(); }, 900 + n * 55);
+      setTimeout(function () { kloon.remove(); }, 1100 + n * 55);
     });
     setTimeout(dan, 240 + kaarten.length * 55);
   }
@@ -3457,6 +3522,18 @@
         : '') +
 
       '<h3 class="section-title">Weergave</h3>' +
+      '<div class="setting-row"><span>Stijl</span>' +
+        '<div class="seg">' + [
+          { key: 'papier', label: 'Papier' },
+          { key: 'apple', label: 'Apple' }
+        ].map(function (t) {
+          return '<button type="button" class="seg-btn' + (currentStyle() === t.key ? ' active' : '') + '" ' +
+            'data-act="set-style" data-val="' + t.key + '">' + t.label + '</button>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<p class="hint block">"Papier" is de warme vormgeving met serif-letters; ' +
+        '"Apple" leunt tegen iOS aan met strakke vlakken en een blauwe accentkleur. ' +
+        'Wisselen kan altijd, en er verandert niets aan je kast.</p>' +
       '<div class="setting-row"><span>Thema</span>' +
         '<div class="seg">' + [
           { key: 'systeem', label: 'Systeem' },
@@ -4691,6 +4768,11 @@
       var uitslag = document.querySelector('.deel-uitslag');
       if (uitslag) uitslag.scrollIntoView({ block: 'nearest' });
     },
+    'set-style': function (btn) {
+      setStyle(btn.getAttribute('data-val'));
+      render();
+      toast(currentStyle() === 'apple' ? 'Apple-stijl aan' : 'Terug naar papier');
+    },
     'set-theme': function (btn) {
       setTheme(btn.getAttribute('data-val'));
       render();
@@ -4751,13 +4833,22 @@
   }
 
   /* Zoeken vernieuwt alleen het raster, zodat het toetsenbord niet wegspringt. */
+  /* Bij elke toetsaanslag het hele raster opnieuw opbouwen is bij een volle
+     kast zonde; even wachten tot je uitgetypt bent scheelt het meeste werk
+     zonder dat het traag voelt. */
+  var zoekTimer = null;
+  function straks(fn) {
+    clearTimeout(zoekTimer);
+    zoekTimer = setTimeout(fn, 110);
+  }
+
   function onInput(ev) {
     if (ev.target.id === 'search') {
       state.filters.q = ev.target.value;
-      refreshGrid();
+      straks(refreshGrid);
     } else if (ev.target.id === 'outfitSearch') {
       state.outfitFilter.q = ev.target.value;
-      refreshOutfitList();
+      straks(refreshOutfitList);
     } else if (ev.target.id === 'pasteCode') {
       keurCode();
     }
@@ -4897,6 +4988,7 @@
     els.fileImport = document.getElementById('fileImport');
 
     applyTheme(currentTheme());
+    applyStyle(currentStyle());
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
     document.addEventListener('keydown', onKeydown);

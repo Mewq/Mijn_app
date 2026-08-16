@@ -333,6 +333,12 @@ Een paar dingen om te weten als je hieraan sleutelt:
   tekst van de teller staan, en dan lezen zowel een schermlezer als een test
   "32" waar 3 hoort te staan.
 
+De tijden zijn met opzet aan de lange kant — een scherm komt in ruim een halve
+seconde op, tegels in zeven tienden — zodat je de beweging echt ziet in plaats
+van vermoedt. Verander je er een, verander dan de bijbehorende `setTimeout` in
+`app.js` mee: die ruimen de klassen en de losse elementen op, en lopen ze voor,
+dan knipt een animatie halverwege af.
+
 Alles hierboven verdwijnt zodra het systeem om minder beweging vraagt.
 
 ## Op de telefoon en op de pc
@@ -350,8 +356,22 @@ geen toeval maar een grens waar de maten omheen gekozen zijn: kaarten van 98 px
 breed, een kop van één regel en compacte seizoenschips. Wordt daar iets groter,
 dan valt de schoenenbaan onder de vouw en is het idee weg.
 
-Onder **Meer → Weergave** kies je het thema: systeem, licht of donker. Die keuze
-wordt onthouden en al vóór het tekenen toegepast, zodat er niets flikkert.
+## Twee stijlen
+
+Onder **Meer → Weergave** kies je de stijl:
+
+- **Papier** — waar we mee begonnen: warm papier, serif-titels, bruine
+  accentkleur en zachte schaduwen.
+- **Apple** — strakker en koeler: de systeemletter voor alles, iOS-blauw,
+  witte vlakken op lichtgrijs, platte knoppen en een segmentkiezer met een
+  schuivend blokje. In donkere modus wordt het papier echt zwart.
+
+Wisselen kan altijd en verandert niets aan je kast — het is dezelfde app in een
+andere jas. Vrijwel het hele verschil zit in de tokens bovenin `style.css`; wat
+daarna volgt zijn de handvol onderdelen die in iOS nu eenmaal net anders staan.
+
+Onder dezelfde kop kies je het thema: systeem, licht of donker. Beide keuzes
+worden onthouden en al vóór het tekenen toegepast, zodat er niets flikkert.
 
 ## Onder de motorkap
 
@@ -408,6 +428,13 @@ regel met `.tile-photo` en vrienden.
 De temperatuur per dag staat in `localStorage` onder `kledingkast-weer`, niet in
 IndexedDB: het is een handjevol getallen, geen kledingstuk. Hij reist wel mee in
 de back-up, zodat hij een verhuizing overleeft.
+
+Een paar dingen zijn er op snelheid uitgezocht. De banen van de stylist meten
+eerst álle kaarten op en schrijven daarna pas — door elkaar heen lezen en
+schrijven laat de browser bij elke kaart opnieuw de lay-out uitrekenen, precies
+terwijl je vinger beweegt. Het zoekveld wacht een tiende seconde voordat het
+raster opnieuw gebouwd wordt. En de banen van de stylist worden per tekenbeurt
+één keer uitgerekend in plaats van per baan opnieuw.
 
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`

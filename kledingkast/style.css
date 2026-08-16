@@ -357,7 +357,7 @@ input, textarea, select { font: inherit; }
 .toolbar.sub { position: static; border-bottom: 0; padding-top: 12px; }
 
 @keyframes panelIn {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(-14px) scale(.98); }
   to { opacity: 1; transform: none; }
 }
 
@@ -365,7 +365,7 @@ input, textarea, select { font: inherit; }
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
-  animation: panelIn .22s cubic-bezier(.22, .61, .36, 1) both;
+  animation: panelIn .38s var(--veer) both;
 }
 
 .filter-group + .filter-group { margin-top: 10px; }
@@ -733,7 +733,7 @@ input, textarea, select { font: inherit; }
   position: fixed;
   inset: 0;
   z-index: 20;
-  animation: overlayIn .22s ease both;
+  animation: overlayIn .32s ease both;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -750,13 +750,13 @@ input, textarea, select { font: inherit; }
   background: var(--bg);
   border-radius: 20px 20px 0 0;
   overflow: hidden;
-  animation: slideUp .4s var(--veer);
+  animation: slideUp .58s var(--veer);
 }
 
-@keyframes slideUp { from { transform: translateY(80px) scale(.97); opacity: .2; } to { transform: none; opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(130px) scale(.95); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dialogIn {
-  from { opacity: 0; transform: translateY(26px) scale(.88); }
+  from { opacity: 0; transform: translateY(38px) scale(.8); }
   to { opacity: 1; transform: none; }
 }
 
@@ -805,7 +805,7 @@ input, textarea, select { font: inherit; }
 .picker-tile.selected .tile-photo { outline: 3px solid var(--accent); outline-offset: -3px; }
 
 .dialog {
-  animation: dialogIn .38s var(--veer) both;
+  animation: dialogIn .52s var(--veer) both;
   align-self: center;
   margin: auto 16px;
   width: 100%;
@@ -970,7 +970,7 @@ input, textarea, select { font: inherit; }
   border-radius: var(--radius);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   background: var(--accent-soft);
-  animation: panelIn .3s var(--veer) both;
+  animation: panelIn .44s var(--veer) both;
 }
 
 .deel-uitslag b { font-size: 14.5px; }
@@ -1943,25 +1943,25 @@ input, textarea, select { font: inherit; }
    terug komt van links, en tussen tabbladen komt het scherm gewoon op. */
 
 @keyframes viewIn {
-  from { opacity: 0; transform: translateY(22px) scale(.985); }
+  from { opacity: 0; transform: translateY(34px) scale(.965); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes viewVooruit {
-  from { opacity: 0; transform: translateX(54px) scale(.985); }
+  from { opacity: 0; transform: translateX(84px) scale(.965); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes viewTerug {
-  from { opacity: 0; transform: translateX(-54px) scale(.985); }
+  from { opacity: 0; transform: translateX(-84px) scale(.965); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-.view.enter-in > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewIn .42s var(--veer) both; }
-.view.enter-vooruit > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewVooruit .42s var(--veer) both; }
-.view.enter-terug > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewTerug .42s var(--veer) both; }
+.view.enter-in > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewIn .66s var(--veer) both; }
+.view.enter-vooruit > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewVooruit .66s var(--veer) both; }
+.view.enter-terug > *:not(.toolbar):not(.grid):not(.style-top):not(.lanes) { animation: viewTerug .66s var(--veer) both; }
 
 /* De zoekbalk plakt bovenaan; die schuiven zou de stickiness onderbreken.
    Een transform op een plakkend element haalt het namelijk los. */
@@ -1970,11 +1970,11 @@ input, textarea, select { font: inherit; }
 
 /* De banen van de stylist komen één voor één van rechts binnenrollen. */
 @keyframes baanIn {
-  from { opacity: 0; transform: translateX(46px); }
+  from { opacity: 0; transform: translateX(72px) scale(.94); }
   to { opacity: 1; transform: none; }
 }
 
-.view[class*="enter-"] .lane { animation: baanIn .5s var(--veer) both; }
+.view[class*="enter-"] .lane { animation: baanIn .68s var(--veer) both; }
 .view[class*="enter-"] .lane:nth-child(1) { animation-delay: .04s; }
 .view[class*="enter-"] .lane:nth-child(2) { animation-delay: .11s; }
 .view[class*="enter-"] .lane:nth-child(3) { animation-delay: .18s; }
@@ -1983,11 +1983,11 @@ input, textarea, select { font: inherit; }
 
 /* Tegels komen na elkaar op in plaats van als één blok. */
 @keyframes tileIn {
-  from { opacity: 0; transform: translateY(30px) scale(.92); }
+  from { opacity: 0; transform: translateY(42px) scale(.86); }
   to { opacity: 1; transform: none; }
 }
 
-.view[class*="enter-"] .grid > * { animation: tileIn .5s var(--veer) both; }
+.view[class*="enter-"] .grid > * { animation: tileIn .7s var(--veer) both; }
 .view[class*="enter-"] .grid > *:nth-child(1) { animation-delay: 0.0s; }
 .view[class*="enter-"] .grid > *:nth-child(2) { animation-delay: 0.045s; }
 .view[class*="enter-"] .grid > *:nth-child(3) { animation-delay: 0.09s; }
@@ -1999,7 +1999,7 @@ input, textarea, select { font: inherit; }
 
 /* Lijstrijen doen hetzelfde, maar korter — er staan er meer onder elkaar. */
 .view[class*="enter-"] .list > *,
-.view[class*="enter-"] .day-list > * { animation: tileIn .44s var(--veer) both; }
+.view[class*="enter-"] .day-list > * { animation: tileIn .62s var(--veer) both; }
 .view[class*="enter-"] .list > *:nth-child(1),
 .view[class*="enter-"] .day-list > *:nth-child(1) { animation-delay: .02s; }
 .view[class*="enter-"] .list > *:nth-child(2),
@@ -2026,7 +2026,7 @@ input, textarea, select { font: inherit; }
   border-radius: 0 0 3px 3px;
   background: var(--accent);
   transform: translateX(calc(var(--tab-i, 0) * 100%));
-  transition: transform .45s var(--veer);
+  transition: transform .6s var(--veer);
 }
 
 /* Snippers bij iets om te vieren. */
@@ -2040,7 +2040,7 @@ input, textarea, select { font: inherit; }
   height: 14px;
   border-radius: 2px;
   opacity: 0;
-  animation: snipper 1.25s cubic-bezier(.15, .7, .35, 1) forwards;
+  animation: snipper 1.6s cubic-bezier(.15, .7, .35, 1) forwards;
 }
 
 @keyframes snipper {
@@ -2102,7 +2102,7 @@ input, textarea, select { font: inherit; }
   100% { transform: scale(1); }
 }
 
-.tel-pop { display: inline-block; animation: telPop .42s cubic-bezier(.2, .9, .3, 1); }
+.tel-pop { display: inline-block; animation: telPop .52s cubic-bezier(.2, .9, .3, 1); }
 
 /* Hanger die zachtjes heen en weer zwaait in een leeg scherm. */
 .hanger-zwaai {
@@ -2145,24 +2145,24 @@ input, textarea, select { font: inherit; }
 
 /* De foto van een detailscherm komt naar je toe. */
 @keyframes heroIn {
-  from { opacity: 0; transform: scale(1.08); }
+  from { opacity: 0; transform: scale(1.14); }
   to { opacity: 1; transform: none; }
 }
 
-.view[class*="enter-"] .detail-photo { animation: heroIn .6s var(--veer) both; }
+.view[class*="enter-"] .detail-photo { animation: heroIn .8s var(--veer) both; }
 
 /* De beoordeelkaart van Askim schuift weg en de volgende komt binnen. */
 @keyframes kaartWeg {
-  to { opacity: 0; transform: translateX(-72%) rotate(-7deg) scale(.9); }
+  to { opacity: 0; transform: translateX(-110%) rotate(-11deg) scale(.82); }
 }
 
 @keyframes kaartIn {
-  from { opacity: 0; transform: translateX(62%) rotate(6deg) scale(.9); }
+  from { opacity: 0; transform: translateX(90%) rotate(9deg) scale(.84); }
   to { opacity: 1; transform: none; }
 }
 
-.askim-card.weg { animation: kaartWeg .24s cubic-bezier(.5, 0, .8, .3) both; }
-.askim-card.nieuw { animation: kaartIn .46s var(--veer) both; }
+.askim-card.weg { animation: kaartWeg .32s cubic-bezier(.5, 0, .8, .3) both; }
+.askim-card.nieuw { animation: kaartIn .64s var(--veer) both; }
 
 /* Zetje op de zojuist gekozen cijferknop. */
 @keyframes klop {
@@ -2206,7 +2206,7 @@ input, textarea, select { font: inherit; }
 
 /* Balkjes in de statistiek groeien uit het niets. */
 @keyframes balkUit { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.view[class*="enter-"] .bar i { transform-origin: left center; animation: balkUit .7s var(--veer) both; }
+.view[class*="enter-"] .bar i { transform-origin: left center; animation: balkUit .95s var(--veer) both; }
 .view[class*="enter-"] .bars .bar-row:nth-child(2) .bar i { animation-delay: .06s; }
 .view[class*="enter-"] .bars .bar-row:nth-child(3) .bar i { animation-delay: .12s; }
 .view[class*="enter-"] .bars .bar-row:nth-child(4) .bar i { animation-delay: .18s; }
@@ -2258,7 +2258,7 @@ input, textarea, select { font: inherit; }
   pointer-events: none;
   box-shadow: var(--shadow-lift);
   transform-origin: 0 0;
-  transition: transform .42s var(--veer), border-radius .42s var(--veer);
+  transition: transform .58s var(--veer), border-radius .58s var(--veer);
 }
 
 .vlucht > * { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
@@ -2316,10 +2316,10 @@ input, textarea, select { font: inherit; }
   top: 0;
   white-space: nowrap;
   text-align: inherit;
-  animation: rolWeg .38s var(--veer) both;
+  animation: rolWeg .5s var(--veer) both;
 }
 
-.rol-in { animation: rolIn .38s var(--veer) both; }
+.rol-in { animation: rolIn .5s var(--veer) both; }
 
 /* — 4. Een rimpel loopt weg vanaf je vinger —
    Het laagje neemt de vorm van de knop over en klipt de cirkel, zodat de
@@ -2340,7 +2340,7 @@ input, textarea, select { font: inherit; }
   position: absolute;
   border-radius: 50%;
   background: currentColor;
-  animation: rimpelUit .6s cubic-bezier(.22, .61, .36, 1) both;
+  animation: rimpelUit .75s cubic-bezier(.22, .61, .36, 1) both;
 }
 
 /* — 5. Sterren spatten weg als je iets tot favoriet maakt — */
@@ -2371,7 +2371,7 @@ input, textarea, select { font: inherit; }
   border-radius: 14px;
   pointer-events: none;
   box-shadow: var(--shadow-lift);
-  transition: transform .62s var(--veer), opacity .62s ease;
+  transition: transform .78s var(--veer), opacity .78s ease;
 }
 
 .bundel > * { width: 100%; height: 100%; }
@@ -2642,3 +2642,176 @@ input, textarea, select { font: inherit; }
   border-radius: 9px;
   overflow: hidden;
 }
+
+/* ══════════════════════════════ Apple-stijl ══════════════════════════════
+   Dezelfde app, andere jas. Bijna alles zit in de tokens hieronder: koel
+   grijs papier, één blauwe accentkleur, ronde vlakken en de systeemletter
+   in plaats van de serif. Wat daarna volgt zijn de handvol onderdelen die
+   in iOS nu eenmaal net anders staan — een groepslijst, een segmentkiezer
+   met een schuivend blokje, en een tabbalk met dunne lijntjes. */
+
+:root[data-style="apple"] {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #e9e9ee;
+  --ink: #1c1c1e;
+  --ink-soft: #636366;
+  --ink-faint: #8e8e93;
+  --line: #d8d8dd;
+  --line-soft: rgba(60, 60, 67, .12);
+  --accent: #007aff;
+  --accent-soft: #e6f0ff;
+  --danger: #ff3b30;
+  --on-accent: #ffffff;
+
+  /* Vlakker: iOS gebruikt liever een randje dan een schaduw. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, .05);
+  --shadow-lift: 0 4px 16px rgba(0, 0, 0, .12);
+
+  /* Geen serif: één systeemletter voor alles. */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style="apple"]:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --ink: #ffffff;
+    --ink-soft: #aeaeb2;
+    --ink-faint: #8e8e93;
+    --line: #38383a;
+    --line-soft: rgba(255, 255, 255, .14);
+    --accent: #0a84ff;
+    --accent-soft: #0a2540;
+    --danger: #ff453a;
+    --on-accent: #ffffff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .6);
+    --shadow-lift: 0 6px 20px rgba(0, 0, 0, .7);
+  }
+}
+
+:root[data-style="apple"][data-theme="dark"] {
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --ink: #ffffff;
+  --ink-soft: #aeaeb2;
+  --ink-faint: #8e8e93;
+  --line: #38383a;
+  --line-soft: rgba(255, 255, 255, .14);
+  --accent: #0a84ff;
+  --accent-soft: #0a2540;
+  --danger: #ff453a;
+  --on-accent: #ffffff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  --shadow-lift: 0 6px 20px rgba(0, 0, 0, .7);
+}
+
+/* Geen lichtval over het papier: iOS-achtergronden zijn egaal. */
+[data-style="apple"] .app { background: var(--bg); }
+
+/* Titels: zwaarder en strakker in plaats van sierlijk. */
+[data-style="apple"] h1,
+[data-style="apple"] h2,
+[data-style="apple"] h3,
+[data-style="apple"] h4 { font-weight: 700; letter-spacing: -.022em; }
+
+[data-style="apple"] .topbar-title { font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
+[data-style="apple"] .detail-title,
+[data-style="apple"] .empty-title { letter-spacing: -.028em; }
+[data-style="apple"] .brand-name { font-weight: 700; letter-spacing: -.02em; }
+
+/* Knoppen: pil-vormig, plat, met de accentkleur als vlak. */
+[data-style="apple"] .btn { border-radius: 12px; font-weight: 600; letter-spacing: -.01em; }
+[data-style="apple"] .btn-primary { background: var(--accent); box-shadow: none; }
+[data-style="apple"] .btn-secondary { background: var(--surface-2); border-color: transparent; }
+[data-style="apple"] .chip { border-radius: 100px; background: var(--surface-2); border-color: transparent; }
+[data-style="apple"] .chip.active { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+
+/* Segmentkiezer zoals iOS: grijze goot met één wit blokje erin. */
+[data-style="apple"] .segment,
+[data-style="apple"] .seg {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 0;
+}
+
+[data-style="apple"] .segment-btn,
+[data-style="apple"] .seg-btn {
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+[data-style="apple"] .segment-btn.active,
+[data-style="apple"] .seg-btn.active {
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+
+/* Lijsten als een gegroepeerde iOS-tabel: één wit vlak, dunne scheidingen. */
+[data-style="apple"] .list {
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+[data-style="apple"] .list-cards { background: transparent; border-radius: 0; overflow: visible; }
+
+[data-style="apple"] .list > .list-item,
+[data-style="apple"] .list > .list-item.column {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-style="apple"] .list > .list-item + .list-item,
+[data-style="apple"] .list > .list-item.column + .list-item.column { border-top: 1px solid var(--line-soft); }
+[data-style="apple"] .chev { color: var(--ink-faint); font-weight: 600; }
+
+[data-style="apple"] .meta-list { border-radius: var(--radius); overflow: hidden; }
+[data-style="apple"] .day-row, [data-style="apple"] .pack-row, [data-style="apple"] .assign-row {
+  border-radius: var(--radius-sm);
+}
+
+/* Tabbalk: dun lijntje, kleine letters, geen streepje — iOS markeert met kleur. */
+[data-style="apple"] .tabbar { border-top: 1px solid var(--line-soft); }
+[data-style="apple"] .tab { font-size: 10px; letter-spacing: -.005em; }
+[data-style="apple"] .tab-indicator { opacity: 0; }
+[data-style="apple"] .topbar { border-bottom: 1px solid var(--line-soft); }
+
+/* Kaarten en tegels: iets platter, met een randje in plaats van een schaduw. */
+[data-style="apple"] .tile-photo,
+[data-style="apple"] .outfit-card,
+[data-style="apple"] .snel-kaart,
+[data-style="apple"] .maand-kaart,
+[data-style="apple"] .over-kaart { box-shadow: var(--shadow); }
+
+[data-style="apple"] .over-kaart { background: var(--surface); }
+[data-style="apple"] .build-bar { border-radius: 16px; }
+[data-style="apple"] .sheet { border-radius: 14px 14px 0 0; }
+[data-style="apple"] .dialog { border-radius: 14px; }
+[data-style="apple"] .toast { border-radius: 12px; }
+
+/* Een schakelaar leest in iOS als een schuifje. */
+[data-style="apple"] .switch { font-weight: 400; }
+
+/* De hanger in de lege kast mag hier ook blauw zijn. */
+[data-style="apple"] .hanger-zwaai { color: var(--accent); }
+
+/* ─────────────────────────── Soepel houden ─────────────────────────────
+   Alleen daar waar echt elke beeldje telt: de browser mag deze lagen apart
+   houden. Overal will-change zetten werkt averechts — dan houdt hij te veel
+   lagen tegelijk in leven. */
+.vlucht, .bundel, .vlieger, .tab-indicator { will-change: transform; }
+.rail-card { will-change: transform; }
+.rail { overscroll-behavior-x: contain; }
+
+/* Het raster en de banen hoeven niet buiten hun eigen doos te tekenen. */
+.grid, .lanes { contain: layout style; }
