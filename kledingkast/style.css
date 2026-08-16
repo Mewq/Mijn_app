@@ -2018,6 +2018,11 @@ input, textarea, select { font: inherit; }
 
 .tab-indicator {
   position: absolute;
+  /* Decoratief en aria-hidden: hij mag nooit een tik opvangen. In de
+     Apple-stijl is hij zo groot als een heel tabblad, en dan zou dat
+     betekenen dat de tabbalk niet meer werkt. */
+  pointer-events: none;
+  z-index: 0;
   top: 0;
   left: 0;
   /* Precies één tabblad breed; --tab-n komt uit de tabbalk zelf. */
@@ -2781,10 +2786,7 @@ input, textarea, select { font: inherit; }
 }
 
 /* Tabbalk: dun lijntje, kleine letters, geen streepje — iOS markeert met kleur. */
-[data-style="apple"] .tabbar { border-top: 1px solid var(--line-soft); }
 [data-style="apple"] .tab { font-size: 10px; letter-spacing: -.005em; }
-[data-style="apple"] .tab-indicator { opacity: 0; }
-[data-style="apple"] .topbar { border-bottom: 1px solid var(--line-soft); }
 
 /* Kaarten en tegels: iets platter, met een randje in plaats van een schaduw. */
 [data-style="apple"] .tile-photo,
@@ -2985,7 +2987,7 @@ input, textarea, select { font: inherit; }
 .build-leeg { font-size: 12px; color: var(--ink-faint); }
 
 /* Het actieve tabblad krijgt een rond vlak in plaats van alleen kleur. */
-.tab { position: relative; }
+.tab { position: relative; z-index: 1; }
 
 .tab::before {
   content: '';
@@ -3032,14 +3034,12 @@ input, textarea, select { font: inherit; }
 }
 
 /* De kopbalk: dikker glas, en de lichtrand loopt langs de onderkant mee. */
+/* De kopbalk staat verderop; hier alleen het glas zelf. */
 [data-style="apple"] .topbar {
   background: var(--glas);
   backdrop-filter: var(--glas-blur);
   -webkit-backdrop-filter: var(--glas-blur);
-  box-shadow: inset 0 -1px 0 var(--glas-rand);
 }
-
-[data-style="apple"] .topbar::after { height: 22px; }
 
 /* De tabbalk zweeft als een capsule boven de inhoud in plaats van vast te
    zitten aan de onderrand. */
@@ -3159,5 +3159,282 @@ input, textarea, select { font: inherit; }
   font-weight: 700;
   letter-spacing: .1em;
   text-indent: .1em;
+  color: var(--ink);
+}
+
+/* ═══════════════ Apple-stijl, tweede ronde: glas met diepte ═══════════════
+   Wat glas overtuigend maakt is niet de doorzichtigheid maar wat eronder
+   gebeurt. Vandaar drie dingen tegelijk:
+
+   1. Onder alles ligt een zacht gekleurd behangetje in de accentkleur. Zonder
+      iets om te vervormen is doorschijnend gewoon grijs.
+   2. De balken boven en onder zweven los en de inhoud schuift eronder door.
+      Daarom staan ze absoluut en heeft de lijst extra lucht boven en onder.
+   3. Elk glasvlak krijgt een lichtstreep over de bovenrand en een schuine
+      glans, plus twee schaduwen: een korte contactschaduw en een wijde val. */
+
+:root[data-style="apple"] {
+  --radius: 24px;
+  --radius-sm: 16px;
+  --glas: color-mix(in srgb, var(--surface) 72%, transparent);
+  --glas-blur: saturate(200%) blur(34px);
+  --glas-diep: 0 1px 2px rgba(0, 0, 0, .06),
+               0 10px 26px rgba(0, 0, 0, .10),
+               0 26px 60px rgba(0, 0, 0, .10);
+  --kop-h: 58px;
+  --voet-h: 74px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style="apple"]:not([data-theme="light"]) {
+    --glas: color-mix(in srgb, var(--surface) 66%, transparent);
+    --glas-diep: 0 1px 2px rgba(0, 0, 0, .5),
+                 0 12px 30px rgba(0, 0, 0, .55),
+                 0 30px 70px rgba(0, 0, 0, .5);
+  }
+}
+
+:root[data-style="apple"][data-theme="dark"] {
+  --glas: color-mix(in srgb, var(--surface) 66%, transparent);
+  --glas-diep: 0 1px 2px rgba(0, 0, 0, .5),
+               0 12px 30px rgba(0, 0, 0, .55),
+               0 30px 70px rgba(0, 0, 0, .5);
+}
+
+/* 1 — Het behang: drie zachte vlekken in de accentkleur. Ze staan vast, dus
+   de inhoud schuift eroverheen en het glas ziet steeds iets anders. */
+[data-style="apple"] .app {
+  background:
+    radial-gradient(58% 42% at 12% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(52% 38% at 96% 18%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 68%),
+    radial-gradient(70% 46% at 40% 104%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 72%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* 2 — De balken zweven; de inhoud loopt eronder door. */
+@media (max-width: 899px) {
+  [data-style="apple"] .topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 12;
+    margin: calc(8px + env(safe-area-inset-top)) 12px 0;
+    padding: 7px 6px;
+    border-radius: 24px;
+    border: 1px solid var(--glas-rand);
+    box-shadow: var(--glas-diep);
+  }
+
+  [data-style="apple"] .topbar::after { display: none; }
+
+  /* De lucht boven de eerste rij staat bewust op dat eerste kind en niet als
+     padding op .view: een plakkend kind telt de padding van zijn scroller bij
+     zijn eigen top op, en dan zakt de zoekbalk 68 px te ver weg. */
+  [data-style="apple"] .view { padding-bottom: calc(var(--voet-h) + 18px); }
+
+  [data-style="apple"] .view > *:first-child {
+    margin-top: calc(var(--kop-h) + 18px + env(safe-area-inset-top));
+  }
+
+  /* Wat bovenaan plakt moet onder de zwevende kopbalk blijven hangen. */
+  [data-style="apple"] .toolbar,
+  [data-style="apple"] .style-top {
+    top: calc(var(--kop-h) + 10px + env(safe-area-inset-top));
+    border-radius: 22px;
+    margin: 0 12px;
+    padding-left: 14px;
+    padding-right: 14px;
+    border: 1px solid var(--glas-rand);
+    background: var(--glas);
+    backdrop-filter: var(--glas-blur);
+    -webkit-backdrop-filter: var(--glas-blur);
+    box-shadow: var(--glas-diep);
+  }
+
+  [data-style="apple"] .toolbar { border-bottom: 0; }
+  [data-style="apple"] .build-bar { bottom: 0; }
+}
+
+/* 3 — Het glasrecept: lichtstreep bovenlangs plus een schuine glans. */
+/* Alleen een eigen stapelcontext, geen positie: de balken hebben hun eigen
+   plek (absoluut of plakkend) en die mag deze regel niet overschrijven. */
+[data-style="apple"] .topbar,
+[data-style="apple"] .tabbar,
+[data-style="apple"] .sheet,
+[data-style="apple"] .dialog,
+[data-style="apple"] .build-bar,
+[data-style="apple"] .toolbar,
+[data-style="apple"] .style-top,
+[data-style="apple"] .bezig-kaart {
+  isolation: isolate;
+}
+
+/* Deze drie staan verder nergens gepositioneerd, dus die hebben het wél nodig. */
+[data-style="apple"] .sheet,
+[data-style="apple"] .dialog,
+[data-style="apple"] .bezig-kaart { position: relative; }
+
+/* Rond paneel = rond geklipt, zodat de chips binnen de hoeken blijven. */
+[data-style="apple"] .topbar,
+[data-style="apple"] .tabbar,
+[data-style="apple"] .toolbar,
+[data-style="apple"] .style-top { overflow: hidden; }
+
+[data-style="apple"] .topbar::before,
+[data-style="apple"] .tabbar::before,
+[data-style="apple"] .sheet::before,
+[data-style="apple"] .dialog::before,
+[data-style="apple"] .build-bar::before,
+[data-style="apple"] .toolbar::before,
+[data-style="apple"] .style-top::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, .40), rgba(255, 255, 255, 0) 46%),
+    linear-gradient(to bottom, rgba(255, 255, 255, .30), rgba(255, 255, 255, 0) 4px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style="apple"]:not([data-theme="light"]) .topbar::before,
+  :root[data-style="apple"]:not([data-theme="light"]) .tabbar::before,
+  :root[data-style="apple"]:not([data-theme="light"]) .sheet::before,
+  :root[data-style="apple"]:not([data-theme="light"]) .dialog::before,
+  :root[data-style="apple"]:not([data-theme="light"]) .build-bar::before,
+  :root[data-style="apple"]:not([data-theme="light"]) .toolbar::before,
+  :root[data-style="apple"]:not([data-theme="light"]) .style-top::before {
+    background:
+      linear-gradient(150deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, 0) 46%),
+      linear-gradient(to bottom, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 3px);
+  }
+}
+
+:root[data-style="apple"][data-theme="dark"] .topbar::before,
+:root[data-style="apple"][data-theme="dark"] .tabbar::before,
+:root[data-style="apple"][data-theme="dark"] .sheet::before,
+:root[data-style="apple"][data-theme="dark"] .dialog::before,
+:root[data-style="apple"][data-theme="dark"] .build-bar::before,
+:root[data-style="apple"][data-theme="dark"] .toolbar::before,
+:root[data-style="apple"][data-theme="dark"] .style-top::before {
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, 0) 46%),
+    linear-gradient(to bottom, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 3px);
+}
+
+/* De tabbalk: een dikke capsule met diepte. */
+@media (max-width: 899px) {
+  [data-style="apple"] .tabbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 12;
+    margin: 0 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 5px;
+    border-radius: 30px;
+    box-shadow: var(--glas-diep);
+  }
+
+  [data-style="apple"] .tab { border-radius: 25px; }
+
+  /* Het blokje glijdt van tabblad naar tabblad in plaats van op te duiken —
+     één ding dat beweegt leest vloeiender dan vijf die aan- en uitgaan. */
+  [data-style="apple"] .tab::before { display: none; }
+
+  [data-style="apple"] .tab-indicator {
+    display: block;
+    top: 5px;
+    left: 5px;
+    height: calc(100% - 10px);
+    width: calc((100% - 10px) / var(--tab-n, 5));
+    border-radius: 25px;
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5),
+                0 2px 8px color-mix(in srgb, var(--accent) 22%, transparent);
+    transition: transform .6s var(--veer);
+  }
+}
+
+/* Strepen tussen de banen passen niet bij glas; ruimte doet hetzelfde werk. */
+[data-style="apple"] .lane + .lane { border-top: 0; }
+[data-style="apple"] .lane { padding: 12px 0 8px; }
+
+/* Ronder: alles wat een hoek heeft mag er meer van. */
+[data-style="apple"] .tile-photo,
+[data-style="apple"] .rail-photo { border-radius: 22px; }
+[data-style="apple"] .collage,
+[data-style="apple"] .collage.big { border-radius: 24px; }
+[data-style="apple"] .collage.small { border-radius: 16px; }
+[data-style="apple"] .list-thumb,
+[data-style="apple"] .sel-thumb { border-radius: 16px; }
+[data-style="apple"] .snel-kaart { border-radius: 24px; }
+[data-style="apple"] .stat { border-radius: 22px; }
+[data-style="apple"] .list { border-radius: 24px; }
+[data-style="apple"] .meta-list { border-radius: 22px; }
+[data-style="apple"] .over-kaart,
+[data-style="apple"] .maand-kaart,
+[data-style="apple"] .eens-kaart,
+[data-style="apple"] .deel-uitslag { border-radius: 24px; }
+[data-style="apple"] .askim-card { border-radius: 30px; }
+[data-style="apple"] .sheet { border-radius: 34px 34px 0 0; }
+[data-style="apple"] .dialog { border-radius: 32px; }
+[data-style="apple"] .build-bar { border-radius: 30px; }
+[data-style="apple"] .input,
+[data-style="apple"] .search { border-radius: 100px; }
+[data-style="apple"] .textarea { border-radius: 22px; }
+[data-style="apple"] .filter-panel { border-top-color: var(--line-soft); }
+
+/* Diepte op de dingen die op het glas liggen. */
+[data-style="apple"] .tile-photo { box-shadow: 0 2px 6px rgba(0, 0, 0, .07), 0 12px 26px rgba(0, 0, 0, .09); }
+[data-style="apple"] .tile:active .tile-photo { transform: scale(.955); }
+
+[data-style="apple"] .askim-card,
+[data-style="apple"] .snel-kaart,
+[data-style="apple"] .over-kaart,
+[data-style="apple"] .maand-kaart,
+[data-style="apple"] .outfit-card,
+[data-style="apple"] .list,
+[data-style="apple"] .stat {
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .07),
+              inset 0 1px 0 var(--glas-rand);
+}
+
+/* Knoppen: capsules die indrukken alsof ze meegeven. */
+[data-style="apple"] .btn { border-radius: 100px; transition: transform .3s var(--veer), filter .2s ease; }
+[data-style="apple"] .btn:active { transform: scale(.94); }
+[data-style="apple"] .chip:active { transform: scale(.93); }
+[data-style="apple"] .icon-btn:active { transform: scale(.9); }
+[data-style="apple"] .snel-kaart:active { transform: scale(.965); }
+
+[data-style="apple"] .btn-primary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45),
+              inset 0 -1px 0 rgba(0, 0, 0, .08),
+              0 2px 6px color-mix(in srgb, var(--accent) 28%, transparent),
+              0 10px 26px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* Het rondje bij de kleurkiezer mag hier ook glimmen. */
+[data-style="apple"] .tint-bol {
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, .45),
+              inset 0 0 0 1px rgba(0, 0, 0, .1),
+              0 3px 10px rgba(0, 0, 0, .18);
+}
+
+/* De titel bovenin: in een zwevende capsule hoort geen kopregel-spatiëring
+   meer maar een gewone, compacte schermnaam. */
+[data-style="apple"] .topbar-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: -.015em;
+  text-indent: 0;
   color: var(--ink);
 }

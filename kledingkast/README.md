@@ -362,11 +362,15 @@ Onder **Meer → Weergave** kies je de stijl:
 
 - **Papier** — waar we mee begonnen: warm papier, serif-titels, bruine
   accentkleur en zachte schaduwen. Deze blijft gewoon bestaan.
-- **Apple** — glas in plaats van vlak. De systeemletter voor alles, capsules
-  in plaats van rechthoeken, en zwevende lagen: de tabbalk hangt als een
-  capsule boven de inhoud, panelen en dialogen zijn doorschijnend met een
-  lichtrand langs de bovenkant, alsof licht over de rand van dik glas valt.
-  In donkere modus wordt het papier echt zwart.
+- **Apple** — glas met diepte. De kopbalk én de tabbalk zweven als losse
+  capsules boven de inhoud, en die inhoud schuift er gewoon onderdoor: geen
+  streep, geen rand, alleen glas. Achter alles ligt een zacht gekleurd
+  behangetje in de accentkleur — zonder iets om te vervormen is doorschijnend
+  namelijk gewoon grijs. Elk zwevend vlak krijgt een lichtstreep over de
+  bovenrand, een schuine glans en twee schaduwen: een korte contactschaduw en
+  een wijde val. Het blokje achter het actieve tabblad glijdt van tabblad naar
+  tabblad in plaats van op te duiken. Alles is capsule-rond, en knoppen drukken
+  in als je ze aanraakt. In donkere modus wordt het papier echt zwart.
 
 Daaronder kies je met zes rondjes een **kleur**: Standaard, Olijf, Inkt, Roos,
 Pruim of Zee. De achtergrond blijft daarbij precies zoals hij is — dat is wat
@@ -454,6 +458,14 @@ schrijven laat de browser bij elke kaart opnieuw de lay-out uitrekenen, precies
 terwijl je vinger beweegt. Het zoekveld wacht een tiende seconde voordat het
 raster opnieuw gebouwd wordt. En de banen van de stylist worden per tekenbeurt
 één keer uitgerekend in plaats van per baan opnieuw.
+
+Twee dingen om te weten als je aan de Apple-stijl sleutelt. Een plakkend kind
+telt in Chromium de `padding-top` van zijn scroller op bij zijn eigen `top`; de
+zoekbalk zakte daardoor 68 px te ver weg. De lucht boven de eerste rij staat
+daarom als marge op dat eerste kind en niet als padding op `.view`. En het
+blokje achter het actieve tabblad is in deze stijl zo groot als een heel
+tabblad — zonder `pointer-events: none` vangt het alle tikken op en werkt de
+tabbalk niet meer.
 
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`
