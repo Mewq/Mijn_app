@@ -402,7 +402,7 @@ input, textarea, select { font: inherit; }
 /* Elke fotohouder moet zelf positie hebben: de <img> erin staat absoluut, en
    zonder houder valt hij terug op de pagina en legt hij zich over alles heen. */
 .tile-photo, .photo-frame, .list-thumb, .sel-thumb, .collage-cell,
-.rail-photo, .podium-foto, .eens-foto, .maand-foto {
+.rail-photo, .podium-foto, .eens-foto, .maand-foto, .bol-foto {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius);
@@ -2815,3 +2815,349 @@ input, textarea, select { font: inherit; }
 
 /* Het raster en de banen hoeven niet buiten hun eigen doos te tekenen. */
 .grid, .lanes { contain: layout style; }
+
+/* ═══════════════════════════ Kleurvarianten ═══════════════════════════
+   Eén accent per variant, in dezelfde ingehouden toon als het papier waar
+   we mee begonnen. De achtergrond blijft zoals hij is — dat is precies wat
+   maakt dat elke combinatie klopt. Per kleur staan er drie waarden: de
+   accentkleur, het zachte vlak eronder, en een lichtere versie voor de
+   donkere modus. */
+
+:root[data-tint="olijf"] { --accent: #6b7340; --accent-soft: #eceedf; }
+:root[data-tint="inkt"]  { --accent: #3a5a8c; --accent-soft: #e4eaf4; }
+:root[data-tint="roos"]  { --accent: #a8556b; --accent-soft: #f6e6ea; }
+:root[data-tint="pruim"] { --accent: #6f5590; --accent-soft: #ece6f4; }
+:root[data-tint="zee"]   { --accent: #2f7d78; --accent-soft: #dfeeed; }
+
+@media (prefers-color-scheme: dark) {
+  :root[data-tint="olijf"]:not([data-theme="light"]) { --accent: #b9c47e; --accent-soft: #23260f; }
+  :root[data-tint="inkt"]:not([data-theme="light"])  { --accent: #8fb4e8; --accent-soft: #131c2b; }
+  :root[data-tint="roos"]:not([data-theme="light"])  { --accent: #e79fb0; --accent-soft: #2a161b; }
+  :root[data-tint="pruim"]:not([data-theme="light"]) { --accent: #b9a2dd; --accent-soft: #1f1830; }
+  :root[data-tint="zee"]:not([data-theme="light"])   { --accent: #6cc7bf; --accent-soft: #0f2422; }
+}
+
+:root[data-tint="olijf"][data-theme="dark"] { --accent: #b9c47e; --accent-soft: #23260f; }
+:root[data-tint="inkt"][data-theme="dark"]  { --accent: #8fb4e8; --accent-soft: #131c2b; }
+:root[data-tint="roos"][data-theme="dark"]  { --accent: #e79fb0; --accent-soft: #2a161b; }
+:root[data-tint="pruim"][data-theme="dark"] { --accent: #b9a2dd; --accent-soft: #1f1830; }
+:root[data-tint="zee"][data-theme="dark"]   { --accent: #6cc7bf; --accent-soft: #0f2422; }
+
+/* In de Apple-stijl mogen dezelfde kleuren een tandje feller: die vlakken
+   zijn koeler en slikken een gedempte tint anders op. */
+:root[data-style="apple"][data-tint="olijf"] { --accent: #5c8a34; --accent-soft: #e8f2e0; }
+:root[data-style="apple"][data-tint="inkt"]  { --accent: #2b6cd4; --accent-soft: #e3ecfb; }
+:root[data-style="apple"][data-tint="roos"]  { --accent: #d1477a; --accent-soft: #fbe6ee; }
+:root[data-style="apple"][data-tint="pruim"] { --accent: #7b4fd4; --accent-soft: #eee7fc; }
+:root[data-style="apple"][data-tint="zee"]   { --accent: #0d9a90; --accent-soft: #dcf1ef; }
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style="apple"][data-tint="olijf"]:not([data-theme="light"]) { --accent: #7ad14f; --accent-soft: #14240c; }
+  :root[data-style="apple"][data-tint="inkt"]:not([data-theme="light"])  { --accent: #4d94ff; --accent-soft: #0b1c33; }
+  :root[data-style="apple"][data-tint="roos"]:not([data-theme="light"])  { --accent: #ff6b9d; --accent-soft: #2c0f1c; }
+  :root[data-style="apple"][data-tint="pruim"]:not([data-theme="light"]) { --accent: #a97cff; --accent-soft: #1b1030; }
+  :root[data-style="apple"][data-tint="zee"]:not([data-theme="light"])   { --accent: #2fd4c6; --accent-soft: #06231f; }
+}
+
+:root[data-style="apple"][data-tint="olijf"][data-theme="dark"] { --accent: #7ad14f; --accent-soft: #14240c; }
+:root[data-style="apple"][data-tint="inkt"][data-theme="dark"]  { --accent: #4d94ff; --accent-soft: #0b1c33; }
+:root[data-style="apple"][data-tint="roos"][data-theme="dark"]  { --accent: #ff6b9d; --accent-soft: #2c0f1c; }
+:root[data-style="apple"][data-tint="pruim"][data-theme="dark"] { --accent: #a97cff; --accent-soft: #1b1030; }
+:root[data-style="apple"][data-tint="zee"][data-theme="dark"]   { --accent: #2fd4c6; --accent-soft: #06231f; }
+
+/* De kiezer zelf: ronde bollen met de kleur erin. */
+.setting-row.kolom { flex-direction: column; align-items: stretch; gap: 10px; }
+
+/* Zes kleuren passen zo precies naast elkaar op een telefoon; scrollen zou
+   betekenen dat je de gekozen kleur soms niet ziet staan. */
+.tint-rij {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.tint {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tint-bol {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12), var(--shadow);
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color .25s ease, transform .3s var(--veer);
+}
+
+.tint.active .tint-bol { outline-color: currentColor; transform: scale(1.08); }
+.tint.active { color: var(--accent); }
+
+.tint-naam {
+  font-size: 10px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.tint.active .tint-naam { color: var(--accent); font-weight: 600; }
+
+/* ══════════════════════ Titel bovenin: een kopregel ══════════════════════
+   Geen ruled line meer onder de balk: de inhoud vervaagt eronder weg in
+   plaats van tegen een streep aan te lopen. De titel zelf is kleiner en
+   gespatieerd — meer een kopregel dan een koptekst. */
+
+.topbar {
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+}
+
+/* De zachte rand: een verloop dat onder de balk uitloopt in plaats van een
+   lijn. Zo weet je waar de balk ophoudt zonder dat er iets doorsnijdt. */
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 16px;
+  pointer-events: none;
+  background: linear-gradient(to bottom,
+    color-mix(in srgb, var(--bg) 70%, transparent), transparent);
+}
+
+.topbar-title {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .19em;
+  text-indent: .19em;          /* de laatste spatie weer eruit, anders staat hij scheef */
+  color: var(--ink-soft);
+}
+
+/* ═════════════ Ronde tegels voor wat je onderin gekozen hebt ═════════════ */
+
+.build-namen {
+  display: flex;
+  align-items: center;
+  gap: -6px;
+  margin-top: 5px;
+}
+
+.build-bol {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  flex: none;
+  margin-right: -8px;          /* ze overlappen als een stapeltje munten */
+  box-shadow: 0 0 0 2px var(--surface), var(--shadow);
+  background: var(--surface-2);
+  animation: bolIn .45s var(--veer) both;
+}
+
+.build-bol:last-child { margin-right: 0; }
+.build-bol .bol-foto { position: absolute; inset: 0; border-radius: 50%; }
+.build-bol .ph-fallback { font-size: 13px; }
+
+@keyframes bolIn {
+  from { opacity: 0; transform: scale(.4) translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.build-leeg { font-size: 12px; color: var(--ink-faint); }
+
+/* Het actieve tabblad krijgt een rond vlak in plaats van alleen kleur. */
+.tab { position: relative; }
+
+.tab::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 46px;
+  height: 30px;
+  transform: translateX(-50%) scale(.6);
+  border-radius: 100px;
+  background: var(--accent-soft);
+  opacity: 0;
+  transition: opacity .35s ease, transform .45s var(--veer);
+  z-index: -1;
+}
+
+.tab.active::before { opacity: 1; transform: translateX(-50%) scale(1); }
+.tab-icon { position: relative; }
+
+/* ════════════════════ Apple-stijl: glas in plaats van vlak ════════════════
+   Wat "liquid glass" doet is niet zomaar doorschijnend maken: elk zwevend
+   vlak krijgt een eigen laagje met een lichtrand bovenaan, alsof er licht
+   over de rand van een dikke plaat glas valt. De inhoud eronder blijft
+   zichtbaar en vervaagt, in plaats van dat er een dekvlak overheen ligt. */
+
+:root[data-style="apple"] {
+  --glas: color-mix(in srgb, var(--surface) 76%, transparent);
+  --glas-rand: rgba(255, 255, 255, .55);
+  --glas-blur: saturate(190%) blur(30px);
+  --radius: 18px;
+  --radius-sm: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-style="apple"]:not([data-theme="light"]) {
+    --glas: color-mix(in srgb, var(--surface) 72%, transparent);
+    --glas-rand: rgba(255, 255, 255, .16);
+  }
+}
+
+:root[data-style="apple"][data-theme="dark"] {
+  --glas: color-mix(in srgb, var(--surface) 72%, transparent);
+  --glas-rand: rgba(255, 255, 255, .16);
+}
+
+/* De kopbalk: dikker glas, en de lichtrand loopt langs de onderkant mee. */
+[data-style="apple"] .topbar {
+  background: var(--glas);
+  backdrop-filter: var(--glas-blur);
+  -webkit-backdrop-filter: var(--glas-blur);
+  box-shadow: inset 0 -1px 0 var(--glas-rand);
+}
+
+[data-style="apple"] .topbar::after { height: 22px; }
+
+/* De tabbalk zweeft als een capsule boven de inhoud in plaats van vast te
+   zitten aan de onderrand. */
+@media (max-width: 899px) {
+  [data-style="apple"] .tabbar {
+    margin: 0 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 4px;
+    border-radius: 26px;
+    border: 1px solid var(--glas-rand);
+    background: var(--glas);
+    backdrop-filter: var(--glas-blur);
+    -webkit-backdrop-filter: var(--glas-blur);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .16), inset 0 1px 0 var(--glas-rand);
+  }
+
+  [data-style="apple"] .tab { padding: 7px 0 6px; border-radius: 22px; }
+
+  /* Het actieve tabblad is het enige dekkende vlak in de balk; daardoor zie
+     je meteen waar je bent zonder dat er een streep bij hoeft. */
+  [data-style="apple"] .tab::before {
+    top: 3px;
+    height: calc(100% - 6px);
+    width: calc(100% - 6px);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    box-shadow: inset 0 1px 0 var(--glas-rand);
+  }
+
+  [data-style="apple"] .view { padding-bottom: 12px; }
+}
+
+/* Knoppen als capsules, met glas voor de tweede rang. */
+[data-style="apple"] .btn { border-radius: 100px; }
+
+[data-style="apple"] .btn-secondary {
+  background: var(--glas);
+  backdrop-filter: var(--glas-blur);
+  -webkit-backdrop-filter: var(--glas-blur);
+  border: 1px solid var(--glas-rand);
+}
+
+[data-style="apple"] .btn-primary {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--accent) 88%, #fff), var(--accent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38),
+              0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+[data-style="apple"] .chip {
+  background: var(--glas);
+  backdrop-filter: var(--glas-blur);
+  -webkit-backdrop-filter: var(--glas-blur);
+  border: 1px solid var(--glas-rand);
+}
+
+[data-style="apple"] .chip.active {
+  background: var(--accent);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+[data-style="apple"] .icon-btn { border-radius: 100px; }
+
+/* Zwevende vlakken: allemaal hetzelfde recept. */
+[data-style="apple"] .sheet,
+[data-style="apple"] .dialog,
+[data-style="apple"] .build-bar,
+[data-style="apple"] .bezig-kaart {
+  background: var(--glas);
+  backdrop-filter: var(--glas-blur);
+  -webkit-backdrop-filter: var(--glas-blur);
+  border: 1px solid var(--glas-rand);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .18), inset 0 1px 0 var(--glas-rand);
+}
+
+[data-style="apple"] .sheet { border-radius: 26px 26px 0 0; border-bottom: 0; }
+[data-style="apple"] .dialog { border-radius: 26px; }
+[data-style="apple"] .build-bar { border-radius: 26px; }
+[data-style="apple"] .overlay { background: rgba(0, 0, 0, .32); backdrop-filter: blur(4px); }
+
+/* Kaarten en lijsten liggen op het glas, dus ze mogen zelf licht vangen. */
+[data-style="apple"] .list,
+[data-style="apple"] .snel-kaart,
+[data-style="apple"] .over-kaart,
+[data-style="apple"] .maand-kaart,
+[data-style="apple"] .stat,
+[data-style="apple"] .outfit-card {
+  border: 1px solid color-mix(in srgb, var(--glas-rand) 60%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .05), inset 0 1px 0 var(--glas-rand);
+}
+
+[data-style="apple"] .snel-kaart { border-radius: 20px; }
+[data-style="apple"] .stat { border-radius: 18px; }
+[data-style="apple"] .toast { border-radius: 100px; }
+
+/* Segmentkiezer in glas. */
+[data-style="apple"] .segment,
+[data-style="apple"] .seg { border-radius: 100px; }
+
+[data-style="apple"] .segment-btn,
+[data-style="apple"] .seg-btn { border-radius: 100px; }
+
+[data-style="apple"] .segment-btn.active,
+[data-style="apple"] .seg-btn.active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .14), inset 0 1px 0 rgba(255, 255, 255, .6);
+}
+
+/* Foto's krijgen concentrische, iets rondere hoeken. */
+[data-style="apple"] .tile-photo,
+[data-style="apple"] .rail-photo { border-radius: 18px; }
+[data-style="apple"] .collage.big { border-radius: 22px; }
+
+/* De titel bovenin mag hier iets zwaarder en minder gespatieerd staan:
+   iOS-kopjes zijn compacter dan de brief-achtige kop van het papier. */
+[data-style="apple"] .topbar-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-indent: .1em;
+  color: var(--ink);
+}

@@ -23,6 +23,8 @@
     else if (t === 'donker') document.documentElement.setAttribute('data-theme', 'dark');
     var s = localStorage.getItem('kledingkast-stijl');
     if (s === 'apple') document.documentElement.setAttribute('data-style', 'apple');
+    var k = localStorage.getItem('kledingkast-kleur');
+    if (k) document.documentElement.setAttribute('data-tint', k);
   } catch (e) { /* privémodus: dan gewoon het systeemthema */ }
 </script>
 <link rel="stylesheet" href="style.css">

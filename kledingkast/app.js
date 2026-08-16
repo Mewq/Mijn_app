@@ -487,6 +487,20 @@
 
   var THEME_KEY = 'kledingkast-thema';
   var STIJL_KEY = 'kledingkast-stijl';
+  var KLEUR_KEY = 'kledingkast-kleur';
+
+  /* ── Kleuren ──
+     Eén accentkleur per variant, in dezelfde ingehouden toon als het papier
+     waar we mee begonnen: aardetinten en gedempte kleuren, niets schreeuwends.
+     Ze werken in beide stijlen; de Apple-stijl zet ze alleen iets feller. */
+  var TINTS = [
+    { key: '',           label: 'Standaard',  hex: '#8c5a34' },
+    { key: 'olijf',      label: 'Olijf',      hex: '#6b7340' },
+    { key: 'inkt',       label: 'Inkt',       hex: '#3a5a8c' },
+    { key: 'roos',       label: 'Roos',       hex: '#a8556b' },
+    { key: 'pruim',      label: 'Pruim',      hex: '#6f5590' },
+    { key: 'zee',        label: 'Zee',        hex: '#2f7d78' }
+  ];
   var WEER_KEY = 'kledingkast-weer';
 
   /* ── Stijl ──
@@ -511,6 +525,38 @@
     if (s === 'apple') root.setAttribute('data-style', 'apple');
     else root.removeAttribute('data-style');
     zetThemeKleur();
+  }
+
+  function currentTint() {
+    try { return localStorage.getItem(KLEUR_KEY) || ''; }
+    catch (e) { return ''; }
+  }
+
+  function setTint(k) {
+    try {
+      if (k) localStorage.setItem(KLEUR_KEY, k);
+      else localStorage.removeItem(KLEUR_KEY);
+    } catch (e) { /* privémodus */ }
+    applyTint(k);
+  }
+
+  function applyTint(k) {
+    var root = document.documentElement;
+    if (k) root.setAttribute('data-tint', k);
+    else root.removeAttribute('data-tint');
+  }
+
+  /* De rondjes waarmee je een kleur kiest laten de kleur zelf zien; in de
+     Apple-stijl staat er een iets fellere variant van dezelfde tint. */
+  function kleurKiezer() {
+    return '<div class="tint-rij">' + TINTS.map(function (t) {
+      return '<button type="button" class="tint' + (currentTint() === t.key ? ' active' : '') + '" ' +
+        'data-act="set-tint" data-val="' + t.key + '" title="' + esc(t.label) + '" ' +
+        'aria-label="' + esc(t.label) + '" aria-pressed="' + (currentTint() === t.key ? 'true' : 'false') + '">' +
+        '<i class="tint-bol" style="background:' + t.hex + '"></i>' +
+        '<span class="tint-naam">' + esc(t.label) + '</span>' +
+      '</button>';
+    }).join('') + '</div>';
   }
 
   /* De statusbalk van de telefoon kleurt mee met het papier van de app. */
@@ -2597,16 +2643,26 @@
   /* De balk onderaan telt op wat je gekozen hebt en bewaart het. */
   function buildBar() {
     var ids = stylistIds();
-    var namen = ids.map(function (id) { return (getItem(id) || {}).name || 'Naamloos'; });
     return '<div class="build-bar' + (ids.length ? ' vol' : '') + '">' +
       '<div class="build-sum">' +
         '<b id="buildCount" data-waarde="' + esc(plural(ids.length, 'stuk', 'stukken')) + '">' +
           plural(ids.length, 'stuk', 'stukken') + '</b>' +
-        '<span id="buildNames" class="build-names">' +
-          (namen.length ? esc(namen.join(' · ')) : 'Blader door de lagen hierboven') + '</span>' +
+        '<div id="buildNames" class="build-namen">' + bollenRij(ids) + '</div>' +
       '</div>' +
       '<button type="button" class="btn btn-primary" data-act="style-save">Bewaren</button>' +
     '</div>';
+  }
+
+  /* Wat je gekozen hebt als ronde schijfjes die elkaar overlappen — sneller
+     te lezen dan een rij namen, en je ziet meteen wát je gekozen hebt. */
+  function bollenRij(ids) {
+    if (!ids.length) return '<span class="build-leeg">Blader door de lagen hierboven</span>';
+    return ids.map(function (id, i) {
+      var it = getItem(id);
+      if (!it) return '';
+      return '<span class="build-bol" style="animation-delay:' + (i * 60) + 'ms" ' +
+        'title="' + esc(it.name || 'Naamloos') + '">' + itemThumb(it, 'bol-foto') + '</span>';
+    }).join('');
   }
 
   /* Alleen de balk bijwerken; opnieuw tekenen zou alle banen terugspoelen. */
@@ -2614,11 +2670,13 @@
     var bar = document.querySelector('.build-bar');
     if (!bar) return;
     var ids = stylistIds();
-    var namen = ids.map(function (id) { return (getItem(id) || {}).name || 'Naamloos'; });
     bar.classList.toggle('vol', !!ids.length);
     rolNaar(document.getElementById('buildCount'), plural(ids.length, 'stuk', 'stukken'));
     var lijst = document.getElementById('buildNames');
-    if (lijst) lijst.textContent = namen.length ? namen.join(' · ') : 'Blader door de lagen hierboven';
+    if (lijst) {
+      lijst.innerHTML = bollenRij(ids);
+      hydrateImages(lijst);
+    }
   }
 
   /* De teller in de kop van een baan (3 / 12) loopt mee met de keuze. */
@@ -3532,8 +3590,9 @@
         }).join('') + '</div>' +
       '</div>' +
       '<p class="hint block">"Papier" is de warme vormgeving met serif-letters; ' +
-        '"Apple" leunt tegen iOS aan met strakke vlakken en een blauwe accentkleur. ' +
+        '"Apple" leunt tegen iOS aan met glas en gelaagde vlakken. ' +
         'Wisselen kan altijd, en er verandert niets aan je kast.</p>' +
+      '<div class="setting-row kolom"><span>Kleur</span>' + kleurKiezer() + '</div>' +
       '<div class="setting-row"><span>Thema</span>' +
         '<div class="seg">' + [
           { key: 'systeem', label: 'Systeem' },
@@ -4768,6 +4827,10 @@
       var uitslag = document.querySelector('.deel-uitslag');
       if (uitslag) uitslag.scrollIntoView({ block: 'nearest' });
     },
+    'set-tint': function (btn) {
+      setTint(btn.getAttribute('data-val'));
+      render();
+    },
     'set-style': function (btn) {
       setStyle(btn.getAttribute('data-val'));
       render();
@@ -4989,6 +5052,7 @@
 
     applyTheme(currentTheme());
     applyStyle(currentStyle());
+    applyTint(currentTint());
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
     document.addEventListener('keydown', onKeydown);

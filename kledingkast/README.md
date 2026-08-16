@@ -356,22 +356,41 @@ geen toeval maar een grens waar de maten omheen gekozen zijn: kaarten van 98 px
 breed, een kop van één regel en compacte seizoenschips. Wordt daar iets groter,
 dan valt de schoenenbaan onder de vouw en is het idee weg.
 
-## Twee stijlen
+## Stijl en kleur
 
 Onder **Meer → Weergave** kies je de stijl:
 
 - **Papier** — waar we mee begonnen: warm papier, serif-titels, bruine
-  accentkleur en zachte schaduwen.
-- **Apple** — strakker en koeler: de systeemletter voor alles, iOS-blauw,
-  witte vlakken op lichtgrijs, platte knoppen en een segmentkiezer met een
-  schuivend blokje. In donkere modus wordt het papier echt zwart.
+  accentkleur en zachte schaduwen. Deze blijft gewoon bestaan.
+- **Apple** — glas in plaats van vlak. De systeemletter voor alles, capsules
+  in plaats van rechthoeken, en zwevende lagen: de tabbalk hangt als een
+  capsule boven de inhoud, panelen en dialogen zijn doorschijnend met een
+  lichtrand langs de bovenkant, alsof licht over de rand van dik glas valt.
+  In donkere modus wordt het papier echt zwart.
 
-Wisselen kan altijd en verandert niets aan je kast — het is dezelfde app in een
-andere jas. Vrijwel het hele verschil zit in de tokens bovenin `style.css`; wat
-daarna volgt zijn de handvol onderdelen die in iOS nu eenmaal net anders staan.
+Daaronder kies je met zes rondjes een **kleur**: Standaard, Olijf, Inkt, Roos,
+Pruim of Zee. De achtergrond blijft daarbij precies zoals hij is — dat is wat
+maakt dat elke combinatie klopt: alleen de accentkleur en het zachte vlak
+eronder verschuiven mee, in dezelfde ingehouden toon als het oorspronkelijke
+papier. Dezelfde keuze staat in de Apple-stijl een tandje feller, want koele
+vlakken slikken een gedempte tint anders op.
 
-Onder dezelfde kop kies je het thema: systeem, licht of donker. Beide keuzes
-worden onthouden en al vóór het tekenen toegepast, zodat er niets flikkert.
+Stijl en kleur staan los van elkaar en van het thema, dus alle combinaties
+kunnen. Wisselen verandert niets aan je kast.
+
+Onder dezelfde kop kies je het thema: systeem, licht of donker. Alle drie de
+keuzes worden onthouden en al vóór het tekenen toegepast, zodat er niets
+flikkert.
+
+De titel bovenin is een **kopregel**: klein, in hoofdletters en gespatieerd, in
+de gewone letter in plaats van de serif. Onder de balk staat geen streep meer —
+de inhoud vervaagt eronder weg in een verloop. Zo weet je waar de balk ophoudt
+zonder dat er een lijn doorheen snijdt.
+
+Wat je in de stylist gekozen hebt staat onderin als **ronde schijfjes** die
+elkaar overlappen, in plaats van een rij namen: sneller te lezen, en je ziet
+meteen wát je gekozen hebt. Het actieve tabblad krijgt een rond vlak achter
+zich.
 
 ## Onder de motorkap
 
