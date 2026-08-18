@@ -145,7 +145,10 @@ terug op afgeronde systeemletters.
 | `mechanics.js` | het leerplan over de ladder verdelen |
 | `addlevels.js` | levels aan de ladder toevoegen en het leerplan bewaken |
 | `pickhard.js` | levels kiezen op weinig directe uitgangen en veel vallen |
-| `analyse.js` | die eigenschappen meten |
+| `analyse.js` | die eigenschappen meten, inclusief de eerste uitgang |
+| `deepgen.js` | borden genereren en meteen zeven op "niets kan snel weg" |
+| `deepen.js` | de beginstand opschuiven en poorten op slot zetten |
+| `insert.js` | kant-en-klare levels in de ladder zetten |
 | `solutions.json` | bewaarde, geverifieerde routes |
 
 ## De negen mechanics
@@ -247,6 +250,35 @@ MINPAR=95 BOMBSLACK=5 node --max-old-space-size=3000 pickhard.js ../../kleurjam.
 Bommen krijgen een marge die meeschaalt met het moment waarop het blok toch al
 vertrekt (`frac`, standaard 0,3). Een vaste marge van drie zetten is op zet 5
 wurgend en op zet 40 niets.
+
+### Levels waar in het begin niets weg kan
+
+`deepgen.js` en `deepen.js` maken borden waar geen enkel blok snel het bord af
+kan. Drie dingen werken samen:
+
+1. **Gesloten poorten.** Zolang een poort dicht is kan géén blok van die kleur
+   eruit. Alle poorten op één na op slot betekent dat maar één kleur als eerste
+   aan de beurt is — en alleen die hoeft nog diep te liggen.
+2. **De beginstand opschuiven.** Elke zet is omkeerbaar, dus vanuit een
+   oplosbare stand geldig schuiven houdt hem oplosbaar. `deepen.js` zoekt daarin
+   naar een stand waar de overgebleven kleur zo diep mogelijk ligt.
+3. **Pijltegels.** Dit is de sterkste knop. Een blokkeerder die normaal even
+   opzij schuift moet met een pijl omrijden, en dat verhoogt de kosten zonder
+   dat er meer blokken nodig zijn.
+
+```sh
+RUWUIT=ruw.json COLORS=5 COLORED=34 node deepgen.js 200 300 diep.json 9 40
+ALLES=1 node deepen.js ruw.json diep_alles.json 9 150
+node arrowdeep.js diep_alles.json pijldiep.json 9 200 6      # in de scratchpad
+node insert.js                                              # zet ze in de ladder
+```
+
+Gemeten met `analyse.js`, dat de eerste fase van de solver gebruikt: een
+A*-zoektocht naar de goedkoopste uitgang. Er is ook een bewezen ondergrens
+(`E.exitCost(..., strict)`): elke blokkeerder in de baan moet minstens één keer
+aan de kant, dus die kosten zijn een echte ondergrens, geen schatting. Die grens
+loopt in de praktijk niet ver op — in een baan van twaalf vakjes passen maar een
+paar losse blokkeerders — dus voor de echte waarde is de A*-meting nodig.
 
 ### solutions.json: het bewijs bij het level
 

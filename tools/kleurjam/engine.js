@@ -289,11 +289,19 @@ function solved(L, st){
   return true;
 }
 
-/* lower-bound-ish cost to get block i out of the board */
-function exitCost(L, st, occ, i){
+/* Ondergrens voor het aantal zetten om blok i het bord af te krijgen.
+
+   Elke blokkeerder in de baan moet minstens één keer aan de kant, het blok zelf
+   moet minstens één keer bewegen om eruit te gaan, en staat het niet uitgelijnd
+   met de poort dan kost dat nog een zet. Dat zijn losse zetten, dus de som is
+   een echte ondergrens — geen schatting.
+
+   Met `strict` komt er Infinity uit als het blok helemaal niet weg kan; zonder
+   die vlag wordt dat 1, wat de zoeker prettiger vindt. */
+function exitCost(L, st, occ, i, strict){
   const b = L.blocks[i];
   const gates = (b.gates && b.gates.length ? b.gates : (b.gate ? [b.gate] : []));
-  if(!gates.length) return 0;
+  if(!gates.length) return strict ? Infinity : 0;
   let best = Infinity;
   for(const gate of gates){
     if(b.move !== "A" && b.move !== SIDE_AXIS[gate.side]) continue;
@@ -334,7 +342,7 @@ function exitCost(L, st, occ, i){
     const cost = (walls > 0 ? 3 + seen.size : 1 + align + seen.size) + shut;
     if(cost < best) best = cost;
   }
-  return best === Infinity ? 1 : best;
+  return best === Infinity ? (strict ? Infinity : 1) : best;
 }
 
 /* --- constraint checking -------------------------------------------------- */

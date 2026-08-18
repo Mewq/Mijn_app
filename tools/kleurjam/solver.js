@@ -113,7 +113,10 @@ function phase(L, st, opts){
 function solveOnce(L, opts){
   opts = opts || {};
   const baseRnd = opts.rnd || Math.random;
-  let st = {pos:L.start.pos.slice(), out:L.start.out.slice()};
+  // desgewenst verderspelen vanaf een stand die al een stuk onderweg is
+  let st = opts.startState
+    ? {pos:opts.startState.pos.slice(), out:opts.startState.out.slice()}
+    : {pos:L.start.pos.slice(), out:L.start.out.slice()};
   const all = [];
   const stack = [];
   const maxMoves = opts.maxMoves || 500;

@@ -15,6 +15,18 @@
 const E = require("./engine");
 const S = require("./solver");
 
+/* Hoeveel zetten kost het om überhaupt het eerste blok naar buiten te krijgen?
+   De eerste fase van de solver is precies dat: een A*-zoektocht naar de
+   goedkoopste uitgang. Vindt die er geen binnen het budget, dan komt er in elk
+   geval niet snel eentje uit. */
+function firstExit(level, opts){
+  const L = E.makeLevel(level);
+  const st = {pos:L.start.pos.slice(), out:L.start.out.slice()};
+  const p = S.phase(L, st, {cap:(opts && opts.cap) || 90000, weight:1.0,
+                            rnd:(opts && opts.rnd) || S.mulberry(4242)});
+  return p ? p.path.length : null;      // null = niet gevonden binnen het budget
+}
+
 /* per blok: op welke zet staat het voor het eerst uitgangsklaar? */
 function readyAt(level, path){
   const L = E.makeLevel(level);
@@ -66,6 +78,7 @@ function analyse(level, path, opts){
   }
 
   return {
+    eersteUitgang: opts.firstExit ? firstExit(level, opts) : undefined,
     par: path.length,
     blokken: blocks.length,
     kleurblokken: kleuren.length,
@@ -77,4 +90,4 @@ function analyse(level, path, opts){
   };
 }
 
-module.exports = {analyse, readyAt};
+module.exports = {analyse, readyAt, firstExit};
