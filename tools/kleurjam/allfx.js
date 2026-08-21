@@ -163,7 +163,8 @@ for(let seed = FROM; seed <= TO; seed++){
   /* Nu de rest, allemaal afgeleid uit dezelfde route. Sleutel eerst: die is het
      kieskeurigst (geen bom of vorst op datzelfde blok), daarna de bommen, en de
      klok als laatste omdat die alleen de lengte nodig heeft. */
-  const wens = ["key","twocolor","twocolor","frozen","frozen","bomb","bomb","bomb","bomb","lock","lock","timer"];
+  const wens = ["key","key","key","twocolor","twocolor","frozen","frozen",
+                "bomb","bomb","bomb","bomb","lock","lock","timer"];
   const res = D.decorate(lvl, pad, wens, S.mulberry(seed*31+7), {
     timer:  {secondsPerMove: 3.4, slack: 45},
     bomb:   {type:"moves", slack: 5, frac: 0.22},
@@ -173,6 +174,22 @@ for(let seed = FROM; seed <= TO; seed++){
   });
   const klaar = res.level;
   if(!S.verify(klaar, pad).ok) continue;                  // mechanics breken de route
+
+  /* Het gaat hier juist om de combinatie, dus een level waar één mechanic niet
+     op te hangen viel telt niet mee. */
+  const mist = [];
+  if(!klaar.timeLimit) mist.push("klok");
+  if(!klaar.blocks.some(b => b.bomb)) mist.push("bom");
+  if(!klaar.gates.some(g => g.locked)) mist.push("slot");
+  if(!klaar.gates.some(g => g.keyLocked)) mist.push("sleutel");
+  if(!klaar.blocks.some(b => b.frozen)) mist.push("vorst");
+  if(!klaar.blocks.some(b => b.colors)) mist.push("2-kleur");
+  if(!(klaar.ice||[]).length) mist.push("ijs");
+  if(!(klaar.arrows||[]).length) mist.push("pijlen");
+  if(mist.length){
+    console.log(`seed ${seed}: par ${pad.length} maar mist ${mist.join(", ")}`);
+    continue;
+  }
 
   klaar.par = pad.length;
   klaar.seed = seed;

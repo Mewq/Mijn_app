@@ -111,6 +111,7 @@ function addFrozen(lvl, L, sch, rnd, opts){
 /* sleutelblok + poorten die pas opengaan als de sleutel buiten is */
 function addKey(lvl, L, sch, rnd, opts){
   const wantGates = (opts && opts.gates) || 1;
+  if(lvl.blocks.some(b => b.key)) return null;   // één sleutel per level houdt het leesbaar
   const cands = [];
   for(let i=0;i<L.blocks.length;i++){
     if(sch.exitAt[i] === null) continue;
