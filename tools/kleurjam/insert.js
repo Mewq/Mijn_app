@@ -8,19 +8,21 @@ const start=html.indexOf("  const LEVELS = [");
 const end=html.indexOf("\n  ];", start)+"\n  ];".length;
 const LEVELS=eval(html.slice(html.indexOf("[",start), html.indexOf("\n  ];",start)+4));
 
-const NAMEN=[
-  ["Schuifwerk","Weinig blokken, weinig ruimte. Geen enkel blok kan meteen weg \u2014 schuif eerst ruimte vrij."],
-  ["Stap voor stap","Elke zet moet ergens toe leiden. Bedenk welk blok als eerste bij zijn poort kan komen."],
-  ["Rondje om de kern","De kern in het midden staat vast. Werk eromheen naar de poorten toe."]
-];
+/* Namen en hints komen uit een sidecar-bestand naast de bundel, zodat dit
+   script niet elke lichting opnieuw aangepast hoeft te worden. */
+const NAMEN=JSON.parse(fs.readFileSync(process.argv[3]||"namen.json","utf8"));
 
 const nieuw=JSON.parse(fs.readFileSync(process.argv[2]||"pijldiep4.json"));
 const routes={};
 const klaar=[];
 nieuw.forEach((l,k)=>{
   const diep=A.firstExit(l,{cap:400000});
+  /* Een meegeleverde bouwroute telt als bewijs: bij zwaar versierde levels vindt
+     de solver niet altijd binnen budget zelf een route die alle bommen haalt. */
   let pad=null;
+  if(l.route && S.verify(l,l.route).ok) pad=l.route;
   for(const cfg of [{tries:2,cap:70000,weight:2.0},{tries:2,cap:120000,weight:1.7}]){
+    if(pad) break;
     const p=S.solve(l,Object.assign({maxMoves:1400},cfg));
     if(p&&S.verify(l,p).ok){ pad=p; break; }
   }
@@ -28,7 +30,7 @@ nieuw.forEach((l,k)=>{
   l.par=pad.length;
   l.name=NAMEN[k][0]; l.hint=NAMEN[k][1];
   l.starMargin=0.25;
-  delete l.eersteUitgang; delete l.ondergrens; delete l.seed; delete l.fx; delete l.fxMatters; delete l.preset;
+  delete l.route; delete l.eersteUitgang; delete l.ondergrens; delete l.seed; delete l.fx; delete l.fxMatters; delete l.preset;
   routes[l.name]=pad.map(m=>({b:m.b,axis:m.axis,d:m.d,to:m.to,exit:!!m.exit,drag:!!m.drag,gate:m.gate}));
   klaar.push(l);
   console.log(`+ ${l.name.padEnd(12)} par=${l.par} blokken=${l.blocks.length} pijlen=${(l.arrows||[]).length} sloten=${l.gates.filter(g=>g.locked).length} | eerste uitgang: ${diep===null?">400k knopen doorzocht":"na "+diep+" zetten"}`);
