@@ -42,6 +42,8 @@ const BASIS = {
 if(process.env.COLORED) BASIS.colored = +process.env.COLORED;
 if(process.env.COLORS)  BASIS.colors  = +process.env.COLORS;
 if(process.env.STONES)  BASIS.stones  = +process.env.STONES;
+if(process.env.MASK)    BASIS.mask    = process.env.MASK;       // muurpatroon uit masks.js
+if(process.env.WALLCLUSTERS) BASIS.wallClusters = +process.env.WALLCLUSTERS;
 
 const RUW = process.env.RUWUIT || null;        // bewaar ook de afvallers
 const RUWMIN = +(process.env.RUWMIN || 1);

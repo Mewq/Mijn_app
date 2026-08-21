@@ -9,12 +9,12 @@ const end=html.indexOf("\n  ];", start)+"\n  ];".length;
 const LEVELS=eval(html.slice(html.indexOf("[",start), html.indexOf("\n  ];",start)+4));
 
 const NAMEN=[
-  ["Ingesloten","Niets kan er snel uit. Graaf eerst een weg vrij."],
-  ["Muurvast","De eerste zetten leveren nog geen enkel blok op. Werk toe naar de opening."],
-  ["Geduldwerk","Pas als er ruimte is gaat de eerste poort open."]
+  ["Schuifwerk","Weinig blokken, weinig ruimte. Geen enkel blok kan meteen weg \u2014 schuif eerst ruimte vrij."],
+  ["Stap voor stap","Elke zet moet ergens toe leiden. Bedenk welk blok als eerste bij zijn poort kan komen."],
+  ["Rondje om de kern","De kern in het midden staat vast. Werk eromheen naar de poorten toe."]
 ];
 
-const nieuw=JSON.parse(fs.readFileSync("pijldiep4.json"));
+const nieuw=JSON.parse(fs.readFileSync(process.argv[2]||"pijldiep4.json"));
 const routes={};
 const klaar=[];
 nieuw.forEach((l,k)=>{
