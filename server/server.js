@@ -266,6 +266,12 @@ const routes = {
     const args = [];
     if (q.get('occasion')) { waar.push('looks.occasion = ?'); args.push(kort(q.get('occasion'), 30)); }
     if (q.get('van')) { waar.push('users.handle = ?'); args.push(kort(q.get('van'), 30)); }
+    // Wie je geblokkeerd hebt komt niet meer voorbij. Één kant op: die persoon
+    // merkt er niets van, want anders is blokkeren een bericht op zich.
+    if (ctx.user) {
+      waar.push('looks.user_id NOT IN (SELECT ander_id FROM blokkades WHERE user_id = ?)');
+      args.push(ctx.user.id);
+    }
     const cursor = Number(q.get('cursor') || 0);
     if (cursor > 0) { waar.push('looks.created_at < ?'); args.push(cursor); }
 
@@ -300,7 +306,8 @@ const routes = {
          FROM saves JOIN looks ON looks.id = saves.look_id
          JOIN users ON users.id = looks.user_id
         WHERE saves.user_id = ? AND looks.status = 'zichtbaar'
-        ORDER BY saves.created_at DESC LIMIT 100`).all(ctx.user.id);
+          AND looks.user_id NOT IN (SELECT ander_id FROM blokkades WHERE user_id = ?)
+        ORDER BY saves.created_at DESC LIMIT 100`).all(ctx.user.id, ctx.user.id);
     return json(res, 200, {
       looks: rijen.map((l) => vormLook(
         l, db.prepare('SELECT * FROM look_items WHERE look_id = ? ORDER BY positie').all(l.id), ctx.user))
@@ -343,6 +350,12 @@ const routes = {
   'GET /api/looks/:id': async (req, res, ctx) => {
     const l = lookMetStukken(ctx.params.id, ctx.user);
     if (!l) return fout(res, 404, 'Deze look bestaat niet (meer).');
+    // Geblokkeerd is geblokkeerd, ook als je het adres rechtstreeks intikt.
+    if (ctx.user && db.prepare(
+      `SELECT 1 FROM blokkades JOIN users ON users.id = blokkades.ander_id
+        WHERE blokkades.user_id = ? AND users.handle = ?`).get(ctx.user.id, l.maker.handle)) {
+      return fout(res, 404, 'Deze look bestaat niet (meer).');
+    }
     return json(res, 200, { look: l });
   },
 
@@ -381,6 +394,24 @@ const routes = {
       db.prepare("UPDATE looks SET status = 'gemeld' WHERE id = ?").run(l.id);
     }
     return json(res, 200, { ok: true, gemeld: aantal });
+  },
+
+  /* ── Iemand niet meer willen zien ──
+     Verplicht zodra vreemden elkaars foto's te zien krijgen: melden is niet
+     genoeg, je moet ook zelf iemand kunnen wegdoen zonder op iemand anders te
+     wachten. */
+  'POST /api/gebruikers/:handle/blokkeer': async (req, res, ctx) => zetBlok(res, ctx, true),
+  'DELETE /api/gebruikers/:handle/blokkeer': async (req, res, ctx) => zetBlok(res, ctx, false),
+
+  'GET /api/me/blokkades': async (req, res, ctx) => {
+    if (!ctx.user) return fout(res, 401, 'Niet ingelogd.');
+    const rijen = db.prepare(
+      `SELECT users.handle, users.naam, blokkades.created_at
+         FROM blokkades JOIN users ON users.id = blokkades.ander_id
+        WHERE blokkades.user_id = ? ORDER BY blokkades.created_at DESC`).all(ctx.user.id);
+    return json(res, 200, {
+      geblokkeerd: rijen.map((r) => ({ handle: r.handle, naam: r.naam, sinds: r.created_at }))
+    });
   },
 
   /* ── Je eigen kast in back-up ──
@@ -436,6 +467,26 @@ function zetSave(res, ctx, aan) {
     db.prepare('DELETE FROM saves WHERE user_id = ? AND look_id = ?').run(ctx.user.id, l.id);
   }
   return json(res, 200, { bewaard: aan });
+}
+
+function zetBlok(res, ctx, aan) {
+  if (!ctx.user) return fout(res, 401, 'Log in om iemand te blokkeren.');
+  const handle = kort(ctx.params.handle, 30).trim().toLowerCase();
+  const ander = db.prepare('SELECT id, handle FROM users WHERE handle = ?').get(handle);
+  if (!ander) return fout(res, 404, 'Deze persoon bestaat niet (meer).');
+  if (ander.id === ctx.user.id) return fout(res, 400, 'Jezelf blokkeren heeft weinig zin.');
+  if (aan) {
+    db.prepare('INSERT OR IGNORE INTO blokkades (user_id, ander_id, created_at) VALUES (?, ?, ?)')
+      .run(ctx.user.id, ander.id, nu());
+    // Wat je van iemand bewaard had wil je ook niet meer tussen je bewaarde
+    // looks zien staan; die filter zit al in de feed, maar dit ruimt het echt op.
+    db.prepare(`DELETE FROM saves WHERE user_id = ?
+                  AND look_id IN (SELECT id FROM looks WHERE user_id = ?)`)
+      .run(ctx.user.id, ander.id);
+  } else {
+    db.prepare('DELETE FROM blokkades WHERE user_id = ? AND ander_id = ?').run(ctx.user.id, ander.id);
+  }
+  return json(res, 200, { geblokkeerd: aan, handle: ander.handle });
 }
 
 /* Een foto mag pas weg als niemand anders hem meer gebruikt — de bestandsnaam

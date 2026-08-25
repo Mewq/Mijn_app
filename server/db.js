@@ -76,6 +76,16 @@ db.exec(`
     PRIMARY KEY (user_id, look_id)
   );
 
+  /* Iemand niet meer willen zien. Werkt één kant op: jij ziet niets meer van
+     die persoon, die persoon merkt er niets van. Beide appwinkels eisen dit
+     zodra vreemden elkaars foto's te zien krijgen. */
+  CREATE TABLE IF NOT EXISTS blokkades (
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ander_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, ander_id)
+  );
+
   CREATE TABLE IF NOT EXISTS meldingen (
     id           TEXT PRIMARY KEY,
     look_id      TEXT NOT NULL REFERENCES looks(id) ON DELETE CASCADE,
@@ -100,6 +110,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_saves ON saves(look_id);
   CREATE INDEX IF NOT EXISTS idx_mijn  ON looks(user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_items ON look_items(look_id, positie);
+  CREATE INDEX IF NOT EXISTS idx_blok  ON blokkades(user_id);
 `);
 
 module.exports = { db, DATA_DIR, UPLOAD_DIR };

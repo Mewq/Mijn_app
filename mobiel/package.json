@@ -1,0 +1,22 @@
+{
+  "name": "kledingkast",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kledingkast als echte app voor iOS en Android",
+  "scripts": {
+    "bouw": "node bouw.js",
+    "sync": "node bouw.js && cap sync",
+    "ios": "node bouw.js && cap sync ios && cap open ios",
+    "android": "node bouw.js && cap sync android && cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "appId": "nl.kledingkast.app",
+  "appName": "Kledingkast",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "always"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 600,
+      "backgroundColor": "#F7F4EF",
+      "showSpinner": false
+    }
+  }
+}

@@ -118,6 +118,7 @@
     authFout: '',
     feedTab: 'community',   // 'community' of 'mijn'
     account: null,          // wie er ingelogd is, zodra de server dat bevestigt
+    blokkades: null,        // null = nog niet opgehaald, [] = opgehaald en leeg
     lookFilter: { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false },
     duel: null,             // de twee outfits die nu tegenover elkaar staan
     wearMode: false         // tikken in de kast = vandaag gedragen
@@ -1574,6 +1575,9 @@
     // mislukte poging zichzelf eindeloos herhalen: laadFeed tekent namelijk
     // opnieuw, en die tekenbeurt zou dan weer een poging starten.
     if (nieuweRoute && parts[0] === 'inspiratie' && state.feedTab === 'community') laadFeed(false);
+    if (nieuweRoute && parts[0] === 'account' && KastAPI.ingelogd() && state.blokkades === null) {
+      laadBlokkades();
+    }
     speelVlucht();
   }
 
@@ -3341,6 +3345,12 @@
     '</div>';
   }
 
+  /* Bij het bouwen van de echte app worden deze meegegeven (zie mobiel/bouw.js).
+     In de browser blijven ze leeg en laat de app ze gewoon weg — beide
+     appwinkels eisen ze wél, dus daar staan ze er altijd bij. */
+  var PRIVACY = window.KAST_PRIVACY || '';
+  var CONTACT = window.KAST_CONTACT || '';
+
   /* ══════════════════════════ Account en server ═════════════════════════
      De app werkt zonder account: je kast is en blijft van jou en staat op je
      telefoon. Inloggen doe je om te delen — publiceren in de community, en je
@@ -3409,12 +3419,37 @@
         ? '<button class="btn btn-secondary btn-block" data-act="kast-omlaag">⬇︎ Kast terugzetten op dit apparaat</button>'
         : '') +
 
+      (state.blokkades && state.blokkades.length
+        ? '<h3 class="section-title">Verborgen mensen</h3>' +
+          '<p class="hint block">Van deze mensen zie je niets in de community. ' +
+            'Zij merken daar niets van.</p>' +
+          '<div class="list">' + state.blokkades.map(function (b) {
+            return '<div class="list-item">' +
+              '<span class="blok-bol">🙈</span>' +
+              '<span class="list-text"><b>@' + esc(b.handle) + '</b>' +
+              '<span class="list-sub">verborgen</span></span>' +
+              '<button class="btn btn-ghost" data-act="blok-weg" data-handle="' + esc(b.handle) + '">' +
+                'Weer tonen</button>' +
+            '</div>';
+          }).join('') + '</div>'
+        : '') +
+
       '<h3 class="section-title">Account</h3>' +
       '<button class="btn btn-secondary btn-block" data-act="auth-uit">Uitloggen</button>' +
       '<button class="btn btn-danger btn-block" data-act="account-wis">Account verwijderen</button>' +
       '<p class="footer-note">Verwijderen wist je account, je gepubliceerde looks en je ' +
         'back-up van de server. Je kast op dit apparaat blijft staan.</p>' +
     '</div>';
+  }
+
+  /* Wie je verborgen hebt. Lukt het ophalen niet, dan blijft de lijst gewoon
+     weg — je account werkt verder prima zonder. */
+  async function laadBlokkades() {
+    try {
+      var uit = await KastAPI.blokkades();
+      state.blokkades = uit.geblokkeerd || [];
+      if (state.blokkades.length) render();
+    } catch (e) { state.blokkades = []; }
   }
 
   /* Na een halve minuut is wat je ziet oud genoeg om bij het openen van het
@@ -4328,7 +4363,27 @@
       '<h3 class="section-title">Opruimen</h3>' +
       '<button class="btn btn-danger btn-block" data-act="wipe">Alles verwijderen</button>' +
 
-      '<p class="footer-note">Mijn Kledingkast · alles blijft lokaal op je eigen apparaat</p>' +
+      (PRIVACY || CONTACT
+        ? '<h3 class="section-title">Privacy en contact</h3>' +
+          '<div class="list">' +
+            (PRIVACY
+              ? '<a class="list-item" href="' + esc(PRIVACY) + '" target="_blank" rel="noopener noreferrer">' +
+                '<span class="blok-bol">🔒</span>' +
+                '<span class="list-text"><b>Privacyverklaring</b>' +
+                '<span class="list-sub">Wat er met je gegevens gebeurt</span></span>' +
+                '<span class="chev">↗</span></a>'
+              : '') +
+            (CONTACT
+              ? '<a class="list-item" href="mailto:' + esc(CONTACT) + '">' +
+                '<span class="blok-bol">✉️</span>' +
+                '<span class="list-text"><b>Contact</b>' +
+                '<span class="list-sub">' + esc(CONTACT) + '</span></span>' +
+                '<span class="chev">↗</span></a>'
+              : '') +
+          '</div>'
+        : '') +
+
+      '<p class="footer-note">Mijn Kledingkast · je kast blijft op je eigen apparaat</p>' +
     '</div>';
   }
 
@@ -5469,6 +5524,8 @@
     'online-meld': async function (btn) {
       var id = btn.getAttribute('data-id');
       if (!KastAPI.ingelogd()) { toast('Log in om te melden'); go('#/account'); return; }
+      var l = state.online.feed.filter(function (x) { return x.id === id; })[0];
+      var handle = l && l.maker ? l.maker.handle : '';
       var ok = await confirmDialog({
         title: 'Deze look melden?',
         body: 'We kijken ernaar. Bij meerdere meldingen verdwijnt hij meteen uit de feed.',
@@ -5478,6 +5535,38 @@
       try {
         await KastAPI.meld(id, 'gemeld vanuit de app');
         toast('Bedankt, we kijken ernaar');
+      } catch (err) { toast(err.message); return; }
+
+      /* Melden is iets vragen aan iemand anders; blokkeren doe je zelf en werkt
+         meteen. Wie net iets meldde wil dat meestal ook. */
+      if (!handle) return;
+      var weg = await confirmDialog({
+        title: 'Ook alles van @' + handle + ' verbergen?',
+        body: 'Je ziet dan niets meer van deze persoon in de community. ' +
+              'Hij of zij merkt daar niets van, en je kunt het altijd terugdraaien ' +
+              'bij Meer › Account.',
+        confirmLabel: 'Verbergen'
+      });
+      if (!weg) return;
+      try {
+        await KastAPI.blokkeer(handle, true);
+        state.online.feed = state.online.feed.filter(function (x) {
+          return !x.maker || x.maker.handle !== handle;
+        });
+        state.blokkades = null;
+        render();
+        toast('Je ziet niets meer van @' + handle);
+      } catch (err) { toast(err.message); }
+    },
+
+    'blok-weg': async function (btn) {
+      var handle = btn.getAttribute('data-handle');
+      try {
+        await KastAPI.blokkeer(handle, false);
+        state.blokkades = (state.blokkades || []).filter(function (b) { return b.handle !== handle; });
+        state.online.geladen = false;         // de feed mag hem weer laten zien
+        render();
+        toast('@' + handle + ' is weer zichtbaar');
       } catch (err) { toast(err.message); }
     },
 
@@ -5503,6 +5592,7 @@
           await KastAPI.login(email.trim(), ww);
         }
         state.account = await KastAPI.me();
+        state.blokkades = null;
         state.online.geladen = false;
         verbergBezig();
         go('#/inspiratie');
@@ -5516,6 +5606,7 @@
     'auth-uit': async function () {
       await KastAPI.logout();
       state.account = null;
+      state.blokkades = null;
       state.online.geladen = false;
       state.online.feed = [];
       render();
@@ -5532,6 +5623,7 @@
       try {
         await KastAPI.wisAccount();
         state.account = null;
+        state.blokkades = null;
         state.online.feed = [];
         state.online.geladen = false;
         go('#/meer');
@@ -6012,7 +6104,12 @@
     state.ready = true;
     render();
 
-    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    /* In de echte app (Capacitor) staan alle bestanden al op de telefoon; een
+       service worker zou daar alleen maar een oude versie kunnen vasthouden
+       nadat je de app hebt bijgewerkt — en sw.js gaat daar niet eens mee. Op
+       het web is hij juist wat de app zonder verbinding laat werken. */
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0 &&
+        !window.Capacitor && !window.KAST_APP) {
       navigator.serviceWorker.register('sw.js')['catch'](function () { /* offline is een extraatje */ });
     }
   }

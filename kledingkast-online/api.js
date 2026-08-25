@@ -135,6 +135,12 @@
       return roep('POST', '/api/looks/' + encodeURIComponent(id) + '/melden', { reden: reden });
     },
 
+    blokkeer: function (handle, aan) {
+      return roep(aan ? 'POST' : 'DELETE',
+        '/api/gebruikers/' + encodeURIComponent(handle) + '/blokkeer');
+    },
+    blokkades: function () { return roep('GET', '/api/me/blokkades'); },
+
     zetKastBackup: function (inhoud) { return roep('PUT', '/api/me/kast', { inhoud: inhoud }); },
     haalKastBackup: function () { return roep('GET', '/api/me/kast'); }
   };

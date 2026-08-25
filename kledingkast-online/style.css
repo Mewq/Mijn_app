@@ -573,6 +573,19 @@ input, textarea, select { font: inherit; }
 .list-sub { font-size: 12px; color: var(--ink-faint); }
 .chev { color: var(--ink-faint); font-size: 20px; }
 
+/* Het bolletje voor iemand die je verborgen hebt — geen foto, want die wil je
+   juist niet meer zien. */
+.blok-bol {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 19px;
+}
+
 /* ─────────────────────────────── Outfits ──────────────────────────── */
 
 .outfit-card {
