@@ -515,6 +515,59 @@ const ip = (req) =>
 
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 
+/* ── De app zelf erbij serveren ──
+   Handig om te kijken: één commando, één adres, en dus ook op je telefoon te
+   openen zolang die op dezelfde wifi zit. In productie zet je hier een echte
+   webserver voor; dan zet je KAST_WEB op leeg. */
+const WEB_MIME = Object.assign({
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon'
+}, MIME);
+
+const WEB_DIR = process.env.KAST_WEB === ''
+  ? null
+  : path.resolve(process.env.KAST_WEB || path.join(__dirname, '..', 'kledingkast-online'));
+
+function serveerApp(req, res, pad) {
+  if (!WEB_DIR || (req.method !== 'GET' && req.method !== 'HEAD')) return false;
+  const naam = pad === '/' ? '/index.html' : pad;
+  // path.resolve haalt ../ eruit; daarna moet het nog steeds in WEB_DIR liggen.
+  const bestand = path.resolve(WEB_DIR, '.' + naam);
+  if (bestand !== WEB_DIR && !bestand.startsWith(WEB_DIR + path.sep)) return false;
+
+  let buf;
+  try {
+    if (!fs.statSync(bestand).isFile()) return false;
+    buf = fs.readFileSync(bestand);
+  } catch (e) { return false; }
+
+  res.writeHead(200, {
+    'content-type': WEB_MIME[path.extname(bestand).toLowerCase()] || 'application/octet-stream',
+    'content-length': buf.length,
+    // Tijdens het kijken wil je je eigen wijzigingen zien, niet die van vijf
+    // minuten terug.
+    'cache-control': 'no-cache'
+  });
+  res.end(req.method === 'HEAD' ? undefined : buf);
+  return true;
+}
+
+/* Het adres waarop je telefoon deze computer kan vinden. */
+function lanAdres() {
+  const netten = require('node:os').networkInterfaces();
+  for (const naam of Object.keys(netten)) {
+    for (const net of netten[naam] || []) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return null;
+}
+
 function serveerFoto(res, naam) {
   // Alleen de naam zelf, geen paden: anders lees je zo /etc/passwd uit.
   if (!/^[a-f0-9]{32}\.(jpg|jpeg|png|webp)$/.test(naam)) return fout(res, 404, 'Niet gevonden.');
@@ -566,7 +619,11 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/uploads/')) return serveerFoto(res, url.pathname.slice(9));
 
   const route = zoekRoute(req.method, url.pathname);
-  if (!route) return fout(res, 404, 'Onbekend adres.');
+  if (!route) {
+    // Geen API-adres? Dan is het misschien de app zelf.
+    if (!url.pathname.startsWith('/api/') && serveerApp(req, res, url.pathname)) return;
+    return fout(res, 404, 'Onbekend adres.');
+  }
 
   try {
     await route.fn(req, res, { user: gebruikerVan(req), params: route.params, url });
@@ -578,7 +635,17 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log('Kledingkast-server luistert op poort ' + PORT));
+  server.listen(PORT, () => {
+    console.log('\nKledingkast draait.\n');
+    console.log('  op deze computer   http://localhost:' + PORT);
+    const lan = lanAdres();
+    if (lan) console.log('  op je telefoon     http://' + lan + ':' + PORT + '   (zelfde wifi)');
+    if (!WEB_DIR) console.log('\n  Alleen de API — KAST_WEB staat leeg.');
+    else if (!fs.existsSync(path.join(WEB_DIR, 'index.html'))) {
+      console.log('\n  Let op: geen index.html in ' + WEB_DIR + ' — alleen de API doet het dan.');
+    }
+    console.log('');
+  });
 }
 
 module.exports = { server, db };

@@ -10,6 +10,19 @@ kosten of een Mac vereisen.
 
 ---
 
+## Eerst even kijken hoe het is
+
+Voordat je hier geld en accounts in steekt: je kunt de app nu al op je telefoon
+bekijken. Op je eigen computer, in de map van dit project:
+
+```sh
+node server/server.js
+```
+
+Die vertelt zelf op welk adres je telefoon hem kan vinden. Tik dat in, zet hem
+op je beginscherm, en je hebt precies wat er straks in de winkel komt — alleen
+zonder de winkel. Zie `server/README.md`.
+
 ## Eenmalig klaarzetten
 
 ```sh

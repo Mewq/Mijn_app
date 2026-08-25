@@ -6,12 +6,14 @@
 (function (global) {
   'use strict';
 
-  /* Waar staat de server? In de browser tijdens ontwikkelen op dezelfde
-     machine; in de echte app het adres dat je bij het bouwen meegeeft. */
-  var BASIS = (global.KAST_API || '').replace(/\/$/, '') ||
-    (location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-      ? 'http://' + location.hostname + ':8788'
-      : '');
+  /* Waar staat de server?
+
+     In de echte app het adres dat mobiel/bouw.js erin bakt. Staat dat er niet,
+     dan gaan we ervan uit dat de server die deze pagina gaf ook de API doet —
+     dat is precies wat `node server/server.js` doet. Zo werkt het op je eigen
+     computer én op je telefoon op dezelfde wifi, zonder iets in te stellen. */
+  var BASIS = (global.KAST_API || '').replace(/\/$/, '');
+  if (!BASIS && /^https?:$/.test(location.protocol)) BASIS = location.origin;
 
   var TOKEN_KEY = 'kledingkast-online-token';
   var USER_KEY = 'kledingkast-online-gebruiker';

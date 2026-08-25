@@ -21,23 +21,32 @@ Node 22 of nieuwer (daarin zit `node:sqlite`).
 node server/server.js
 ```
 
-Instellingen gaan via omgevingsvariabelen:
+Dat is alles. De server geeft niet alleen de API maar ook de app zelf, en
+vertelt bij het starten waar je hem kunt openen:
 
-| variabele   | standaard        | waarvoor                                            |
-|-------------|------------------|-----------------------------------------------------|
-| `PORT`      | `8787`           | poort waarop de server luistert                       |
-| `KAST_DATA` | `server/data`    | map met `kast.db` en `uploads/`                       |
-| `ORIGIN`    | `*`              | welk webadres de app mag benaderen (CORS)             |
+```
+Kledingkast draait.
 
-Voor ontwikkelen op je eigen machine:
-
-```sh
-PORT=8788 ORIGIN='*' node server/server.js
+  op deze computer   http://localhost:8787
+  op je telefoon     http://192.168.1.23:8787   (zelfde wifi)
 ```
 
-De app in `kledingkast-online/` zoekt de server dan vanzelf op
-`http://localhost:8788`. Wil je een ander adres, zet dan vóór het laden van
-`api.js` een `window.KAST_API = 'https://...'` in `index.html`.
+Dat tweede adres tik je op je telefoon in — zelfde wifi, verder niets nodig.
+Wil je hem tussen je apps hebben staan: in Safari of Chrome op "delen" en dan
+"Zet op beginscherm". Zo ziet hij eruit als in de winkel, alleen zonder de
+winkel.
+
+De app zoekt de API op hetzelfde adres als waar hij zelf vandaan komt, dus er
+valt niets in te stellen.
+
+Instellingen gaan via omgevingsvariabelen:
+
+| variabele   | standaard             | waarvoor                                   |
+|-------------|-----------------------|--------------------------------------------|
+| `PORT`      | `8787`                | poort waarop de server luistert              |
+| `KAST_DATA` | `server/data`         | map met `kast.db` en `uploads/`              |
+| `ORIGIN`    | `*`                   | welk webadres de app mag benaderen (CORS)    |
+| `KAST_WEB`  | `../kledingkast-online` | map met de app; leeg = alleen de API       |
 
 ## De data
 
@@ -60,8 +69,10 @@ kast.jouwdomein.nl {
 }
 ```
 
-Zet dan `ORIGIN` op het adres waar de app staat, zodat niet elke willekeurige
-site de API kan aanspreken.
+Staat de app op datzelfde adres — dus laat je de server hem gewoon geven —
+dan hoef je met `ORIGIN` niets te doen. Zet je de app ergens anders neer, zet
+`ORIGIN` dan op dát adres, zodat niet elke willekeurige site de API kan
+aanspreken.
 
 Werkt net zo goed op Fly.io, Railway, een Hetzner-VPS of een Raspberry Pi
 thuis. Eis is alleen: Node 22+, een schijf die blijft bestaan (voor

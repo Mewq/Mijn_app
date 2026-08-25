@@ -1,7 +1,7 @@
 /* Kleine service worker: de app blijft werken zonder verbinding.
    Bump CACHE bij elke wijziging aan de bestanden hieronder, anders blijven
    bezoekers de oude versie uit de cache zien. */
-var CACHE = 'kledingkast-online-v4';
+var CACHE = 'kledingkast-online-v5';
 var ASSETS = [
   './',
   './index.html',
@@ -34,7 +34,20 @@ self.addEventListener('activate', function (ev) {
 self.addEventListener('fetch', function (ev) {
   var req = ev.request;
   if (req.method !== 'GET') return;
-  if (new URL(req.url).origin !== location.origin) return;
+  var url = new URL(req.url);
+  if (url.origin !== location.origin) return;
+
+  /* De server mag op hetzelfde adres staan als de app — dat is juist hoe je
+     dit hoort te hosten. Dan komen /api/ en /uploads/ hier ook langs, en die
+     mogen absoluut niet uit de cache:
+
+       - de feed zou voorgoed blijven staan op wat je de eerste keer zag;
+       - antwoorden op iemands ingelogde verzoeken zouden op het apparaat
+         achterblijven, ook nadat die persoon is uitgelogd.
+
+     De foto's van de server hebben hun eigen naam per inhoud en staan al een
+     jaar in de gewone browsercache; die hebben ons hier niet nodig. */
+  if (url.pathname.indexOf('/api/') === 0 || url.pathname.indexOf('/uploads/') === 0) return;
 
   // Navigaties: eerst het netwerk, zodat een nieuwe versie meteen doorkomt.
   if (req.mode === 'navigate') {
