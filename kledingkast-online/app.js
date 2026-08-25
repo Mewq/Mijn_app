@@ -112,7 +112,12 @@
     stylist: {},            // baan -> gekozen kledingstuk-id
     stylistSeason: '',      // filter op seizoen in de stylist
     deelResultaat: null,    // wat de laatst geplakte code opleverde
-    looks: [],              // gedeelde looks: van jou of van iemand gekregen
+    looks: [],              // lokale looks: van jou of van iemand gekregen via een bestand
+    online: { feed: [], bezig: false, fout: '', geladen: false, tijd: 0 },
+    authMode: 'nieuw',
+    authFout: '',
+    feedTab: 'community',   // 'community' of 'mijn'
+    account: null,          // wie er ingelogd is, zodra de server dat bevestigt
     lookFilter: { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false },
     duel: null,             // de twee outfits die nu tegenover elkaar staan
     wearMode: false         // tikken in de kast = vandaag gedragen
@@ -1408,6 +1413,7 @@
     if (parts[0] === 'inspiratie' || parts[0] === 'look') return 'inspiratie';
     if (parts[0] === 'askim') return 'askim';
     if (parts[0] === 'meer' || parts[0] === 'doneren' || parts[0] === 'opruimen') return 'meer';
+    if (parts[0] === 'account') return 'meer';
     return 'kast';
   }
 
@@ -1424,7 +1430,7 @@
       var nieuw = String(parts[1]).indexOf('new') === 0;
       return (nieuw || parts[2] === 'edit') ? 2 : 1;
     }
-    if (p0 === 'doneren' || p0 === 'opruimen') return 1;
+    if (p0 === 'doneren' || p0 === 'opruimen' || p0 === 'account') return 1;
     if (p0 === 'look') return 1;
     return 0;
   }
@@ -1494,6 +1500,10 @@
           '<button class="icon-btn" data-act="look-import" title="Look toevoegen">＋</button>');
         view = viewInspiratie();
         break;
+      case 'account':
+        top = topBar('Account', '#/meer');
+        view = viewAccount();
+        break;
       case 'look':
         top = topBar('', '#/inspiratie');
         view = viewLookDetail(parts[1]);
@@ -1526,7 +1536,8 @@
     // Alleen bij een echte schermwissel laten opkomen — niet bij elk tikje
     // op een filterchip, want dan knippert het hele scherm mee.
     var here = parts.join('/');
-    if (here !== lastRoute) {
+    var nieuweRoute = here !== lastRoute;
+    if (nieuweRoute) {
       var diepte = routeDepth(parts);
       var richting = 'in';
       if (lastDepth !== null && diepte > lastDepth) richting = 'vooruit';
@@ -1558,6 +1569,11 @@
     // Elke baan begint op het stuk dat al gekozen was, anders sta je na een
     // tekenbeurt weer helemaal links terwijl je keuze verderop staat.
     if (parts[0] === 'stylist') centreerBanen();
+    // De community-feed halen we op zodra je hem opent, niet eerder — en
+    // alleen bij het openen. Zou dit bij élke tekenbeurt gebeuren, dan zou een
+    // mislukte poging zichzelf eindeloos herhalen: laadFeed tekent namelijk
+    // opnieuw, en die tekenbeurt zou dan weer een poging starten.
+    if (nieuweRoute && parts[0] === 'inspiratie' && state.feedTab === 'community') laadFeed(false);
     speelVlucht();
   }
 
@@ -3325,6 +3341,167 @@
     '</div>';
   }
 
+  /* ══════════════════════════ Account en server ═════════════════════════
+     De app werkt zonder account: je kast is en blijft van jou en staat op je
+     telefoon. Inloggen doe je om te delen — publiceren in de community, en je
+     kast in je account zetten zodat een nieuwe telefoon niet leeg begint. */
+
+  function viewAccount() {
+    var ik = KastAPI.gebruiker();
+    if (!ik) {
+      return '<div class="page">' +
+        '<div class="over-kaart">' +
+          '<span class="account-icoon">👋</span>' +
+          '<div class="over-tekst"><b>Meedoen met de community</b>' +
+          '<span>Je kast blijft van jou en op je telefoon. Een account is er om te delen.</span></div>' +
+        '</div>' +
+
+        '<div class="segment small">' +
+          '<button type="button" class="segment-btn' + (state.authMode === 'nieuw' ? ' active' : '') + '" ' +
+            'data-act="auth-mode" data-val="nieuw">Nieuw account</button>' +
+          '<button type="button" class="segment-btn' + (state.authMode !== 'nieuw' ? ' active' : '') + '" ' +
+            'data-act="auth-mode" data-val="login">Inloggen</button>' +
+        '</div>' +
+
+        '<form class="form" id="authForm" novalidate>' +
+          (state.authMode === 'nieuw'
+            ? '<div class="field"><label for="a-handle">Je naam in de app</label>' +
+                '<input id="a-handle" class="input" type="text" placeholder="sinan" ' +
+                  'autocomplete="username" autocapitalize="off" spellcheck="false">' +
+                '<p class="hint block">Letters, cijfers, _ en . — dit zien anderen bij je looks.</p></div>'
+            : '') +
+          '<div class="field"><label for="a-email">E-mailadres</label>' +
+            '<input id="a-email" class="input" type="email" inputmode="email" ' +
+              'autocomplete="email" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label for="a-ww">Wachtwoord</label>' +
+            '<input id="a-ww" class="input" type="password" ' +
+              'autocomplete="' + (state.authMode === 'nieuw' ? 'new-password' : 'current-password') + '"></div>' +
+          (state.authFout ? '<p class="auth-fout">' + esc(state.authFout) + '</p>' : '') +
+          '<button type="button" class="btn btn-primary btn-block" data-act="auth-doe">' +
+            (state.authMode === 'nieuw' ? 'Account maken' : 'Inloggen') + '</button>' +
+        '</form>' +
+
+        '<p class="footer-note">Je e-mailadres is alleen om in te loggen. Anderen zien ' +
+          'alleen je naam in de app.</p>' +
+      '</div>';
+    }
+
+    var backup = state.account && state.account.backup;
+    return '<div class="page">' +
+      '<div class="over-kaart">' +
+        '<span class="account-icoon">👤</span>' +
+        '<div class="over-tekst"><b>' + esc(ik.naam || ik.handle) + '</b>' +
+        '<span>@' + esc(ik.handle) +
+          (state.account ? ' · ' + plural(state.account.looks, 'look', 'looks') + ' geplaatst' : '') +
+        '</span></div>' +
+      '</div>' +
+
+      '<h3 class="section-title">Je kast in je account</h3>' +
+      '<p class="hint block">Zet een kopie van je kast in je account, dan begint een nieuwe ' +
+        'telefoon niet leeg. Foto\'s gaan mee, dus dit kan even duren.</p>' +
+      (backup
+        ? '<p class="hint block">Laatste back-up: ' + esc(formatDate(
+            new Date(backup.updatedAt).toISOString().slice(0, 10))) +
+          ' · ' + Math.round(backup.bytes / 1024) + ' kB</p>'
+        : '<p class="hint block">Er staat nog geen back-up in je account.</p>') +
+      '<button class="btn btn-primary btn-block" data-act="kast-omhoog">⬆︎ Kast naar mijn account</button>' +
+      (backup
+        ? '<button class="btn btn-secondary btn-block" data-act="kast-omlaag">⬇︎ Kast terugzetten op dit apparaat</button>'
+        : '') +
+
+      '<h3 class="section-title">Account</h3>' +
+      '<button class="btn btn-secondary btn-block" data-act="auth-uit">Uitloggen</button>' +
+      '<button class="btn btn-danger btn-block" data-act="account-wis">Account verwijderen</button>' +
+      '<p class="footer-note">Verwijderen wist je account, je gepubliceerde looks en je ' +
+        'back-up van de server. Je kast op dit apparaat blijft staan.</p>' +
+    '</div>';
+  }
+
+  /* Na een halve minuut is wat je ziet oud genoeg om bij het openen van het
+     tabblad opnieuw op te halen. Korter zou betekenen dat je bij elk heen en
+     weer tikken opnieuw het net op moet; langer en je mist de likes die er
+     ondertussen bij kwamen. */
+  var FEED_VERS = 30000;
+
+  /* De feed van de server, los van de looks die lokaal in je telefoon staan. */
+  async function laadFeed(force) {
+    var o = state.online;
+    if (o.bezig) return;
+    if (!force && o.geladen && Date.now() - o.tijd < FEED_VERS) return;
+    o.bezig = true;
+    o.fout = '';
+    render();
+    try {
+      var uit = await KastAPI.feed({
+        occasion: state.lookFilter.occasion,
+        season: state.lookFilter.season,
+        color: state.lookFilter.color
+      });
+      o.feed = uit.looks || [];
+      o.geladen = true;
+      o.tijd = Date.now();
+    } catch (err) {
+      // Wél iets in beeld hebben en de verbinding kwijtraken is iets anders
+      // dan met lege handen staan; dat verdient ook een ander zinnetje.
+      o.fout = err.offline
+        ? (o.feed.length
+            ? 'Geen verbinding — dit is wat je eerder zag.'
+            : 'Geen verbinding met de server.')
+        : err.message;
+    }
+    o.bezig = false;
+    render();
+  }
+
+  /* Een look publiceren: dezelfde losgeweekte vorm als lokaal, maar met de
+     foto's als data-URL erbij zodat de server ze kan opslaan. */
+  async function publiceerOnline(lookId) {
+    var l = getLook(lookId);
+    if (!l) return;
+    if (!KastAPI.ingelogd()) { go('#/account'); toast('Log eerst in om te publiceren'); return; }
+
+    var ok = await confirmDialog({
+      title: 'Publiceren in de community?',
+      body: 'Iedereen in de app kan deze look zien, inclusief de foto\'s en de winkellinks. ' +
+            'Weghalen kan altijd, maar wat gedeeld is kan al gezien zijn.',
+      confirmLabel: 'Publiceren'
+    });
+    if (!ok) return;
+
+    toonBezig('Publiceren…');
+    try {
+      var body = {
+        naam: l.naam, notitie: l.notitie, occasion: l.occasion, seasons: l.seasons,
+        cover: l.coverImageId ? await beeldAlsDataUrl(l.coverImageId) : null,
+        stukken: []
+      };
+      for (var i = 0; i < l.stukken.length; i++) {
+        var st = l.stukken[i];
+        body.stukken.push({
+          naam: st.naam, categorie: st.categorie, kleuren: st.kleuren,
+          merk: st.merk, link: st.link,
+          foto: st.imageId ? await beeldAlsDataUrl(st.imageId) : null
+        });
+      }
+      var uit = await KastAPI.publiceer(body);
+      l.online = uit.look.id;
+      await saveLook(l);
+      state.online.geladen = false;
+      verbergBezig();
+      go('#/inspiratie');
+      toast('Je look staat in de community');
+    } catch (err) {
+      verbergBezig();
+      toast(err.message);
+    }
+  }
+
+  async function beeldAlsDataUrl(id) {
+    var rec = await KastDB.get(KastDB.IMAGES, id);
+    if (!rec) return null;
+    return await blobToDataUrl(rec.full || rec.thumb);
+  }
+
   /* ═══════════════════════════ Inspiratie ═══════════════════════════════
      Een look is een outfit die losgeweekt is van je kast: de kledingstukken
      zitten er als kopie in, met foto, merk en winkellink. Daardoor blijft een
@@ -3410,8 +3587,9 @@
   }
 
   function viewInspiratie() {
+    if (state.feedTab === 'community') return viewCommunity();
     if (!state.looks.length) {
-      return emptyState('💡', 'Nog geen looks',
+      return feedWissel() + emptyState('💡', 'Nog geen looks',
         'Hier komen looks te staan: die van jou zodra je er een deelt, en die van anderen ' +
         'zodra je er een krijgt. Elk kledingstuk kan een winkellink hebben, zodat je meteen ' +
         'ziet waar het te koop is.',
@@ -3425,7 +3603,7 @@
 
     var lijst = gefilterdeLooks();
     return '' +
-      '<div class="style-top">' +
+      '<div class="style-top">' + feedWissel() +
         '<div class="chips scroll-x">' +
           '<button type="button" class="chip' + (state.lookFilter.alleenLeuk ? ' active' : '') + '" ' +
             'data-act="look-filter-leuk">❤️ Leuk</button>' +
@@ -3453,6 +3631,114 @@
         ? ''
         : '<p class="footer-note">Looks komen van jou en van mensen die je er een sturen. ' +
           'Er is geen centrale tijdlijn — alles blijft op je eigen telefoon.</p>');
+  }
+
+  function feedWissel() {
+    return '<div class="segment small">' +
+      '<button type="button" class="segment-btn' + (state.feedTab === 'community' ? ' active' : '') + '" ' +
+        'data-act="feed-tab" data-val="community">🌍 Community</button>' +
+      '<button type="button" class="segment-btn' + (state.feedTab === 'mijn' ? ' active' : '') + '" ' +
+        'data-act="feed-tab" data-val="mijn">Op mijn telefoon (' + state.looks.length + ')</button>' +
+    '</div>';
+  }
+
+  /* De gedeelde feed. Zonder inloggen mag je gewoon kijken — pas voor liken,
+     bewaren en publiceren is een account nodig. */
+  /* "Net nu", "3 minuten geleden" — genoeg om te weten of je naar iets van
+     zojuist kijkt of naar iets van een uur terug. */
+  function sindsTekst(tijd) {
+    if (!tijd) return 'nog niet opgehaald';
+    var sec = Math.max(0, Math.round((Date.now() - tijd) / 1000));
+    if (sec < 45) return 'zojuist bijgewerkt';
+    var min = Math.round(sec / 60);
+    if (min < 60) return 'bijgewerkt ' + plural(min, 'minuut', 'minuten') + ' geleden';
+    return 'bijgewerkt ' + plural(Math.round(min / 60), 'uur', 'uur') + ' geleden';
+  }
+
+  function viewCommunity() {
+    var o = state.online;
+    var kop = '<div class="style-top">' + feedWissel() +
+      '<div class="feed-balk">' +
+        '<span class="feed-tijd">' + (o.bezig ? 'ophalen…' : sindsTekst(o.tijd)) + '</span>' +
+        '<button type="button" class="feed-ver' + (o.bezig ? ' draait' : '') + '" ' +
+          'data-act="feed-opnieuw" aria-label="Feed vernieuwen">' +
+          '<span class="ver-pijl">↻</span> Vernieuwen</button>' +
+      '</div>' +
+      '<div class="chips scroll-x">' +
+        chipRow(OCCASIONS, state.lookFilter.occasion, 'look-filter-occasion', { allLabel: 'Alles' }) +
+      '</div>' +
+      '<div class="chips scroll-x">' +
+        chipRow(SEASONS, state.lookFilter.season, 'look-filter-season', { allLabel: 'Heel jaar' }) +
+        chipRow(COLORS, state.lookFilter.color, 'look-filter-color', { allLabel: 'Alle kleuren' }) +
+      '</div>' +
+    '</div>';
+
+    var lijf;
+    if (o.bezig && !o.feed.length) {
+      lijf = '<div class="empty small"><div class="empty-icon">⏳</div>' +
+        '<p class="empty-text">Even ophalen…</p></div>';
+    } else if (o.fout && !o.feed.length) {
+      // De knop om het opnieuw te proberen staat hierboven in de balk, op de
+      // plek waar hij ook staat als er wél iets te zien is.
+      lijf = '<div class="empty small"><div class="empty-icon">📡</div>' +
+        '<p class="empty-text">' + esc(o.fout) + '</p>' +
+        '<p class="hint">Tik op ↻ Vernieuwen zodra je weer verbinding hebt. ' +
+        'Je eigen kast werkt gewoon door.</p></div>';
+    } else if (!o.feed.length) {
+      lijf = '<div class="empty small"><div class="empty-icon">🌍</div>' +
+        '<p class="empty-text">Nog niemand heeft hier iets geplaatst. Wees de eerste — ' +
+        'publiceer een van je eigen looks.</p>' +
+        '<button class="btn btn-ghost" data-act="feed-tab" data-val="mijn">Naar mijn looks</button></div>';
+    } else {
+      lijf = (o.fout ? '<p class="feed-melding">' + esc(o.fout) + '</p>' : '') +
+        '<div class="feed">' + o.feed.map(onlineKaart).join('') + '</div>';
+    }
+    return kop + lijf;
+  }
+
+  /* Een kaart uit de community. De foto's komen van de server, dus die laden
+     gewoon via het net in plaats van uit de database. */
+  function onlineKaart(l) {
+    var teKoop = (l.stukken || []).filter(function (st) { return !!st.link; });
+    var cover = l.cover || (l.stukken.filter(function (s) { return s.foto; })[0] || {}).foto;
+    return '<article class="look" data-online="' + esc(l.id) + '">' +
+      '<div class="look-beeld">' +
+        (cover
+          ? '<div class="look-foto"><img class="ph-img loaded" src="' + esc(KastAPI.fotoUrl(cover)) + '" alt=""></div>'
+          : '<div class="look-foto empty-collage"><span>✨</span></div>') +
+        '<span class="look-maker' + (l.vanMij ? ' eigen' : '') + '">' +
+          (l.vanMij ? 'Van jou' : '@' + esc(l.maker.handle)) + '</span>' +
+        (teKoop.length ? '<span class="look-shop">🛍️ ' + teKoop.length + '</span>' : '') +
+      '</div>' +
+      '<div class="look-body">' +
+        '<span class="look-naam">' + esc(l.naam || 'Naamloze look') + '</span>' +
+        '<span class="look-meta">' + plural(l.stukken.length, 'stuk', 'stukken') +
+          (l.occasion ? ' · ' + esc((occasionMap[l.occasion] || {}).label || l.occasion) : '') +
+          (l.likes ? ' · ' + plural(l.likes, 'like', 'likes') : '') + '</span>' +
+        (l.notitie ? '<p class="look-notitie">' + esc(l.notitie) + '</p>' : '') +
+        (teKoop.length
+          ? '<div class="look-links">' + teKoop.slice(0, 3).map(function (st) {
+              return '<a class="shop-pil" href="' + esc(st.link) + '" target="_blank" rel="noopener noreferrer">' +
+                '🛍️ ' + esc(st.naam || 'Bekijken') + '</a>';
+            }).join('') +
+            (teKoop.length > 3 ? '<span class="shop-pil meer">+' + (teKoop.length - 3) + '</span>' : '') +
+          '</div>'
+          : '') +
+        '<div class="look-acties">' +
+          '<button type="button" class="look-knop' + (l.geliked ? ' aan' : '') + '" ' +
+            'data-act="online-leuk" data-id="' + esc(l.id) + '">' +
+            (l.geliked ? '❤️' : '🤍') + ' <span>' + (l.likes || 0) + '</span></button>' +
+          '<button type="button" class="look-knop' + (l.bewaard ? ' aan' : '') + '" ' +
+            'data-act="online-bewaar" data-id="' + esc(l.id) + '">' +
+            (l.bewaard ? '🔖' : '📑') + ' <span>Bewaren</span></button>' +
+          (l.vanMij
+            ? '<button type="button" class="look-knop" data-act="online-weg" data-id="' + esc(l.id) + '">' +
+              '🗑️ <span>Weghalen</span></button>'
+            : '<button type="button" class="look-knop" data-act="online-meld" data-id="' + esc(l.id) + '">' +
+              '⚑ <span>Melden</span></button>') +
+        '</div>' +
+      '</div>' +
+    '</article>';
   }
 
   /* Eén kaart in de rij: groot beeld, wie hem maakte, en de winkellinks die
@@ -3562,6 +3848,13 @@
             '<span class="sr-only">' + (i + 1) + '</span>' +
           '</div>';
         }).join('') + '</div>' +
+
+        (l.bron === 'ik'
+          ? (l.online
+              ? '<p class="hint block">✓ Deze look staat in de community.</p>'
+              : '<button class="btn btn-primary btn-block" data-act="look-online" data-id="' + esc(l.id) + '">' +
+                '🌍 Publiceren in de community</button>')
+          : '') +
 
         '<div class="row-actions">' +
           '<button class="btn btn-secondary" data-act="look-deel" data-id="' + esc(l.id) + '">📤 Doorsturen</button>' +
@@ -3983,6 +4276,14 @@
               '<span class="chev">›</span></a>';
           }).join('') + '</div>'
         : '') +
+
+      '<h3 class="section-title">Account</h3>' +
+      '<p class="hint block">Met een account publiceer je looks in de community en zet je een ' +
+        'kopie van je kast veilig. Zonder account werkt de app gewoon, alleen deel je niets.</p>' +
+      '<a class="btn btn-secondary btn-block" href="#/account">' +
+        (KastAPI.ingelogd()
+          ? '👤 ' + esc((KastAPI.gebruiker() || {}).naam || 'Mijn account')
+          : '👋 Inloggen of account maken') + '</a>' +
 
       '<h3 class="section-title">Weergave</h3>' +
       '<div class="setting-row"><span>Stijl</span>' +
@@ -5115,6 +5416,162 @@
     'share-choices': function () { openShareCode(); },
     'paste-choices': function () { openPasteCode(); },
     'ga-wasmand': function () { state.filters.vak = 'laundry'; go('#/kast'); },
+
+    /* ── Community en account ── */
+    'feed-tab': function (btn) {
+      state.feedTab = btn.getAttribute('data-val');
+      render();
+      if (state.feedTab === 'community') laadFeed(false);
+    },
+    'feed-opnieuw': function () { laadFeed(true); },
+    'look-online': function (btn) { publiceerOnline(btn.getAttribute('data-id')); },
+
+    'online-leuk': async function (btn) {
+      var id = btn.getAttribute('data-id');
+      var l = state.online.feed.filter(function (x) { return x.id === id; })[0];
+      if (!l) return;
+      if (!KastAPI.ingelogd()) { toast('Log in om te liken'); go('#/account'); return; }
+      try {
+        var uit = await KastAPI.like(id, !l.geliked);
+        l.geliked = uit.geliked;
+        l.likes = uit.likes;
+        if (uit.geliked) sterrenBui(btn);
+        render();
+      } catch (err) { toast(err.message); }
+    },
+    'online-bewaar': async function (btn) {
+      var id = btn.getAttribute('data-id');
+      var l = state.online.feed.filter(function (x) { return x.id === id; })[0];
+      if (!l) return;
+      if (!KastAPI.ingelogd()) { toast('Log in om te bewaren'); go('#/account'); return; }
+      try {
+        var uit = await KastAPI.bewaar(id, !l.bewaard);
+        l.bewaard = uit.bewaard;
+        render();
+        toast(uit.bewaard ? 'Bewaard' : 'Niet meer bewaard');
+      } catch (err) { toast(err.message); }
+    },
+    'online-weg': async function (btn) {
+      var id = btn.getAttribute('data-id');
+      var ok = await confirmDialog({
+        title: 'Uit de community halen?',
+        body: 'Anderen zien hem dan niet meer. Je eigen kopie blijft gewoon staan.',
+        confirmLabel: 'Weghalen', danger: true
+      });
+      if (!ok) return;
+      try {
+        await KastAPI.verwijderLook(id);
+        state.online.feed = state.online.feed.filter(function (x) { return x.id !== id; });
+        render();
+        toast('Uit de community gehaald');
+      } catch (err) { toast(err.message); }
+    },
+    'online-meld': async function (btn) {
+      var id = btn.getAttribute('data-id');
+      if (!KastAPI.ingelogd()) { toast('Log in om te melden'); go('#/account'); return; }
+      var ok = await confirmDialog({
+        title: 'Deze look melden?',
+        body: 'We kijken ernaar. Bij meerdere meldingen verdwijnt hij meteen uit de feed.',
+        confirmLabel: 'Melden'
+      });
+      if (!ok) return;
+      try {
+        await KastAPI.meld(id, 'gemeld vanuit de app');
+        toast('Bedankt, we kijken ernaar');
+      } catch (err) { toast(err.message); }
+    },
+
+    'auth-mode': function (btn) {
+      state.authMode = btn.getAttribute('data-val');
+      state.authFout = '';
+      render();
+    },
+    'auth-doe': async function () {
+      var email = (document.getElementById('a-email') || {}).value || '';
+      var ww = (document.getElementById('a-ww') || {}).value || '';
+      var handleVeld = document.getElementById('a-handle');
+      state.authFout = '';
+      toonBezig(state.authMode === 'nieuw' ? 'Account maken…' : 'Inloggen…');
+      try {
+        if (state.authMode === 'nieuw') {
+          await KastAPI.registreer({
+            email: email.trim(), wachtwoord: ww,
+            handle: (handleVeld ? handleVeld.value : '').trim().toLowerCase(),
+            naam: (handleVeld ? handleVeld.value : '').trim()
+          });
+        } else {
+          await KastAPI.login(email.trim(), ww);
+        }
+        state.account = await KastAPI.me();
+        state.online.geladen = false;
+        verbergBezig();
+        go('#/inspiratie');
+        toast('Welkom, ' + (KastAPI.gebruiker() || {}).naam);
+      } catch (err) {
+        verbergBezig();
+        state.authFout = err.message;
+        render();
+      }
+    },
+    'auth-uit': async function () {
+      await KastAPI.logout();
+      state.account = null;
+      state.online.geladen = false;
+      state.online.feed = [];
+      render();
+      toast('Uitgelogd');
+    },
+    'account-wis': async function () {
+      var ok = await confirmDialog({
+        title: 'Account verwijderen?',
+        body: 'Je account, je gepubliceerde looks en je back-up worden van de server gewist. ' +
+              'Dit kan niet ongedaan worden gemaakt. Je kast op dit apparaat blijft staan.',
+        confirmLabel: 'Verwijderen', danger: true
+      });
+      if (!ok) return;
+      try {
+        await KastAPI.wisAccount();
+        state.account = null;
+        state.online.feed = [];
+        state.online.geladen = false;
+        go('#/meer');
+        toast('Je account is verwijderd');
+      } catch (err) { toast(err.message); }
+    },
+
+    'kast-omhoog': async function () {
+      toonBezig('Kast inpakken…');
+      try {
+        var blob = await buildBackupBlob();
+        var tekst = await blob.text();
+        var uit = await KastAPI.zetKastBackup(tekst);
+        state.account = await KastAPI.me();
+        verbergBezig();
+        render();
+        toast('Kast bewaard: ' + Math.round(uit.bytes / 1024) + ' kB');
+      } catch (err) {
+        verbergBezig();
+        toast(err.message);
+      }
+    },
+    'kast-omlaag': async function () {
+      var ok = await confirmDialog({
+        title: 'Kast terugzetten?',
+        body: 'Wat er in je account staat komt op dit apparaat te staan. Kledingstukken met ' +
+              'hetzelfde id worden overschreven.',
+        confirmLabel: 'Terugzetten'
+      });
+      if (!ok) return;
+      toonBezig('Kast ophalen…');
+      try {
+        var uit = await KastAPI.haalKastBackup();
+        verbergBezig();
+        await importBackup(new File([uit.inhoud], 'kast.json', { type: 'application/json' }));
+      } catch (err) {
+        verbergBezig();
+        toast(err.message);
+      }
+    },
 
     /* ── Inspiratie ── */
     'look-publiceer': function (btn) { publiceerLook(btn.getAttribute('data-id')); },

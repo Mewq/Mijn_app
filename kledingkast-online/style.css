@@ -3587,3 +3587,77 @@ input, textarea, select { font: inherit; }
 [data-style="apple"] .look { border-radius: 24px; }
 [data-style="apple"] .look-knop { border-radius: 100px; }
 [data-style="apple"] .shop-pil { border-color: transparent; }
+
+/* ─────────────────────── Account en de gedeelde feed ────────────────────── */
+
+.account-icoon { font-size: 30px; flex: none; }
+
+.auth-fout {
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* Melding boven de feed als hij uit de cache komt of iets niet lukte. */
+.feed-melding {
+  margin: 12px 14px 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.style-top .segment.small { margin: 0 14px 8px; }
+
+/* Regeltje tussen de tabbladen en de filters: hoe vers is wat je ziet, en
+   hoe haal je het opnieuw op. */
+.feed-balk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 14px 8px;
+}
+
+.feed-tijd {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.feed-ver {
+  flex: none;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform var(--tijd-kort) var(--veer), background var(--tijd-kort) ease;
+}
+
+.feed-ver:active { transform: scale(.94); }
+
+.ver-pijl { display: inline-block; }
+
+/* Tijdens het ophalen draait het pijltje mee — alleen het pijltje, want een
+   meedraaiend woord is niet te lezen. */
+.feed-ver.draait { color: var(--accent); }
+.feed-ver.draait .ver-pijl { animation: feedDraait 1s linear infinite; }
+
+@keyframes feedDraait {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-ver.draait .ver-pijl { animation: none; }
+}
+
+@media (min-width: 720px) {
+  .feed-balk { margin: 0 24px 8px; }
+}
