@@ -66,6 +66,23 @@ internet.
   doneerstapel ligt blijft weg. Met de seizoensknoppen bovenaan filter je de
   lagen, en favorieten en hoge cijfers van Askim staan vooraan.
 
+**Inspiratie**
+- Het tabblad **💡 Inspiratie** is een rij looks om doorheen te scrollen. Een
+  *look* is een outfit die losgeweekt is van je kast: de kledingstukken zitten
+  er als kopie in, met foto, merk en **winkellink**. Daardoor blijft een look
+  die je van iemand krijgt heel, ook al heeft die persoon heel andere kleding.
+- Op elk kledingstuk kun je een **winkellink** zetten. Die staat als knop op het
+  kledingstuk zelf én onder elke look waarin het stuk zit, zodat de ander met
+  één tik ziet waar het te koop is. Alleen `http` en `https` komen erdoor.
+- Filteren op gelegenheid, seizoen, kleur, van wie hij is, en op wat je leuk
+  vond of bewaarde. Liken en bewaren gaan met één tik en blijven staan.
+- Een eigen outfit publiceer je met **💡 Als look**; hij staat meteen in je rij.
+  **📤 Doorsturen** maakt er een bestandje van dat je via WhatsApp of AirDrop
+  verstuurt, en de ontvanger tikt op **＋** om hem toe te voegen.
+- **Er is geen centrale tijdlijn.** De app heeft geen server, dus "de community"
+  bestaat uit de mensen aan wie jij een look stuurt en van wie jij er een krijgt.
+  Alles blijft op je eigen telefoon staan.
+
 **Outfits en mappen**
 - Een outfit is een naam plus een set kledingstukken uit je kast, met
   gelegenheid, seizoen en notities.
@@ -404,7 +421,7 @@ Losse bestanden, geen build-stap en geen externe libraries.
 | --- | --- |
 | `index.html` | Het omhulsel: kopbalk, scherm, tabbalk |
 | `app.js` | Alle schermen, formulieren en logica |
-| `db.js` | IndexedDB-laag (`items`, `outfits`, `folders`, `images`) |
+| `db.js` | IndexedDB-laag (`items`, `outfits`, `folders`, `images`, `looks`) |
 | `style.css` | Vormgeving, met een lichte en donkere modus |
 | `sw.js` | Service worker, zodat de app offline blijft werken |
 | `icon.svg`, `icon-*.png` | Icoon voor het beginscherm |
@@ -466,6 +483,16 @@ daarom als marge op dat eerste kind en niet als padding op `.view`. En het
 blokje achter het actieve tabblad is in deze stijl zo groot als een heel
 tabblad — zonder `pointer-events: none` vangt het alle tikken op en werkt de
 tabbalk niet meer.
+
+Een look bewaart geen verwijzingen naar je kast maar een kopie van elk stuk,
+inclusief een eigen kopie van de foto. Dat kost wat ruimte en is precies de
+bedoeling: verwijder je het kledingstuk, dan blijft de look heel, en een look
+van iemand anders werkt zonder dat jij die kleding hebt.
+
+Winkellinks worden bij het opslaan én bij het binnenkomen van een gedeelde look
+door `netteLink()` gehaald. Alleen `http` en `https` overleven dat; een
+`javascript:`-link in een veld dat later als knop op het scherm staat is precies
+het soort ding waar je later spijt van krijgt.
 
 Foto's worden pas uit de database gehaald als ze in de buurt van het scherm
 komen. Let op als je daaraan sleutelt: `rootMargin` van een `IntersectionObserver`

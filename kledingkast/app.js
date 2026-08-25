@@ -112,6 +112,8 @@
     stylist: {},            // baan -> gekozen kledingstuk-id
     stylistSeason: '',      // filter op seizoen in de stylist
     deelResultaat: null,    // wat de laatst geplakte code opleverde
+    looks: [],              // gedeelde looks: van jou of van iemand gekregen
+    lookFilter: { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false },
     duel: null,             // de twee outfits die nu tegenover elkaar staan
     wearMode: false         // tikken in de kast = vandaag gedragen
   };
@@ -965,6 +967,7 @@
     return {
       id: uid('itm'), name: '', category: 'tops', colors: [], seasons: [],
       brand: '', size: '', notes: '', favorite: false,
+      link: '',            // waar dit stuk te koop is; reist mee als je een look deelt
       wearCount: 0, lastWorn: null, imageIds: [], coverImageId: null,
       rating: null,        // cijfer van Askim, 1 t/m 10
       askimNote: '',       // briefje van Askim bij haar cijfer
@@ -1023,6 +1026,7 @@
     if (i.laundry === undefined) i.laundry = false;
     if (i.askimNote === undefined) i.askimNote = '';
     if (i.askimWish === undefined) i.askimWish = false;
+    if (i.link === undefined) i.link = '';
     // Oudere records kennen alleen een teller en de laatste datum. Die laatste
     // dag nemen we mee, zodat de agenda niet bij nul begint; de teller blijft
     // leidend voor het aantal.
@@ -1401,6 +1405,7 @@
     if (parts[0] === 'outfits' || parts[0] === 'outfit') return 'outfits';
     if (parts[0] === 'mappen' || parts[0] === 'map' || parts[0] === 'agenda') return 'outfits';
     if (parts[0] === 'stylist') return 'stylist';
+    if (parts[0] === 'inspiratie' || parts[0] === 'look') return 'inspiratie';
     if (parts[0] === 'askim') return 'askim';
     if (parts[0] === 'meer' || parts[0] === 'doneren' || parts[0] === 'opruimen') return 'meer';
     return 'kast';
@@ -1420,6 +1425,7 @@
       return (nieuw || parts[2] === 'edit') ? 2 : 1;
     }
     if (p0 === 'doneren' || p0 === 'opruimen') return 1;
+    if (p0 === 'look') return 1;
     return 0;
   }
 
@@ -1482,6 +1488,15 @@
         top = topBar('Stylist', null,
           '<button class="icon-btn" data-act="style-shuffle" title="Verras me">🎲</button>');
         view = viewStylist();
+        break;
+      case 'inspiratie':
+        top = topBar('Inspiratie', null,
+          '<button class="icon-btn" data-act="look-import" title="Look toevoegen">＋</button>');
+        view = viewInspiratie();
+        break;
+      case 'look':
+        top = topBar('', '#/inspiratie');
+        view = viewLookDetail(parts[1]);
         break;
       case 'map':
         if (parts[1] === 'new') { top = topBar('Nieuwe map', '#/mappen'); view = viewFolderForm(null); }
@@ -1566,6 +1581,7 @@
     { key: 'kast', href: '#/kast', icon: '🚪', label: 'Kast' },
     { key: 'stylist', href: '#/stylist', icon: '🪄', label: 'Stylist' },
     { key: 'outfits', href: '#/outfits', icon: '✨', label: 'Outfits' },
+    { key: 'inspiratie', href: '#/inspiratie', icon: '💡', label: 'Inspiratie' },
     { key: 'askim', href: '#/askim', icon: '💛', label: 'Askim' },
     { key: 'meer', href: '#/meer', icon: '☰', label: 'Meer' }
   ];
@@ -1851,6 +1867,7 @@
       ? it.seasons.map(function (s) { return (seasonMap[s] || {}).label || s; }).join(', ')
       : 'Het hele jaar door');
     if (it.brand) rows += metaRow('Merk', it.brand);
+    if (it.link) rows += metaRow('Te koop bij', winkelNaam(it.link));
     if (it.size) rows += metaRow('Maat', it.size);
     rows += metaRow('Gedragen', (it.wearCount || 0) + ' keer' +
       (it.lastWorn ? ' · laatst ' + formatDate(it.lastWorn) : ''));
@@ -1895,6 +1912,11 @@
           : wornOn(it, todayISO())
             ? '<button class="btn btn-secondary btn-block" data-act="unwear-item" data-id="' + esc(it.id) + '">✓ Vandaag gedragen — toch niet?</button>'
             : '<button class="btn btn-primary btn-block" data-act="wear-item" data-id="' + esc(it.id) + '">Vandaag gedragen</button>') +
+
+        (it.link
+          ? '<a class="btn btn-secondary btn-block winkel-knop" href="' + esc(it.link) + '" ' +
+              'target="_blank" rel="noopener noreferrer">🛍️ Bekijk bij ' + esc(winkelNaam(it.link)) + '</a>'
+          : '') +
 
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(it, 'rate-item') +
@@ -1978,6 +2000,27 @@
           'data-id="' + esc(obj.id) + '">Bewaren</button>' +
       '</div>' +
     '</div>';
+  }
+
+  /* ── Winkellinks ──
+     Alleen http en https komen erdoor. Een javascript:-link in een veld dat
+     later als knop op het scherm staat is precies het soort ding waar je
+     later spijt van krijgt, dus die filteren we er hier al uit. */
+  function netteLink(ruw) {
+    var tekst = String(ruw == null ? '' : ruw).trim();
+    if (!tekst) return '';
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(tekst)) tekst = 'https://' + tekst;
+    try {
+      var u = new URL(tekst);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+      return u.href;
+    } catch (e) { return ''; }
+  }
+
+  /* De winkelnaam uit de link halen: "www.cos.com/nl/…" wordt "cos.com". */
+  function winkelNaam(link) {
+    try { return new URL(link).hostname.replace(/^www\./, ''); }
+    catch (e) { return link; }
   }
 
   /* ─────────────────────────── Kledingstuk-formulier ─────────────────────── */
@@ -2082,6 +2125,11 @@
       '<div class="field-row">' +
         '<div class="field"><label for="f-brand">Merk</label>' +
           '<input id="f-brand" class="input" type="text" value="' + esc(it.brand) + '" autocomplete="off"></div>' +
+
+      '<div class="field"><label for="f-link">Winkellink <span class="hint">(optioneel)</span></label>' +
+        '<input id="f-link" class="input" type="url" inputmode="url" placeholder="cos.com/…" ' +
+          'value="' + esc(it.link || '') + '" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+        '<p class="hint block">Deel je deze look, dan kunnen anderen hier meteen naartoe.</p></div>' +
         '<div class="field"><label for="f-size">Maat</label>' +
           '<input id="f-size" class="input" type="text" value="' + esc(it.size) + '" autocomplete="off"></div>' +
         '<div class="field"><label for="f-price">Prijs</label>' +
@@ -2107,6 +2155,7 @@
     var v = function (sel) { var e = document.getElementById(sel); return e ? e.value : ''; };
     d.data.name = v('f-name').trim();
     d.data.brand = v('f-brand').trim();
+    d.data.link = netteLink(v('f-link'));
     d.data.size = v('f-size').trim();
     d.data.notes = v('f-notes').trim();
     // Komma's zijn hier normaal; JavaScript wil een punt.
@@ -2345,7 +2394,8 @@
             '</div>') +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/outfit/' + esc(o.id) + '/edit">Bewerken</a>' +
-          '<button class="btn btn-secondary" data-act="share-outfit" data-id="' + esc(o.id) + '">📤 Delen</button>' +
+          '<button class="btn btn-secondary" data-act="share-outfit" data-id="' + esc(o.id) + '">📤 Plaatje</button>' +
+          '<button class="btn btn-secondary" data-act="look-publiceer" data-id="' + esc(o.id) + '">💡 Als look</button>' +
           '<button class="btn btn-secondary" data-act="duplicate-outfit" data-id="' + esc(o.id) + '">Dupliceren</button>' +
           '<button class="btn btn-danger" data-act="delete-outfit" data-id="' + esc(o.id) + '">Verwijderen</button>' +
         '</div>' +
@@ -3275,6 +3325,361 @@
     '</div>';
   }
 
+  /* ═══════════════════════════ Inspiratie ═══════════════════════════════
+     Een look is een outfit die losgeweekt is van je kast: de kledingstukken
+     zitten er als kopie in, met foto, merk en winkellink. Daardoor blijft een
+     look die je van iemand krijgt heel, ook al heeft die persoon totaal andere
+     kleding dan jij.
+
+     Er is geen server, dus "de community" bestaat uit de mensen aan wie je een
+     look stuurt en van wie je er een krijgt. Wat je zelf publiceert staat er
+     meteen tussen, zodat de rij niet leeg blijft. */
+
+  function newLook() {
+    return {
+      id: uid('look'), naam: '', maker: '', notitie: '',
+      stukken: [],              // {naam, categorie, kleuren, merk, link, imageId}
+      coverImageId: null,
+      occasion: '', seasons: [], tags: [],
+      bron: 'ik',               // 'ik' of 'ontvangen'
+      leuk: false, bewaard: false,
+      createdAt: Date.now(), updatedAt: Date.now()
+    };
+  }
+
+  function normalizeLook(l) {
+    l.stukken = (l.stukken || []).map(function (st) {
+      st.kleuren = st.kleuren || [];
+      st.link = netteLink(st.link);      // ook bij binnenkomst nog een keer nakijken
+      return st;
+    });
+    l.seasons = l.seasons || [];
+    l.tags = l.tags || [];
+    l.bron = l.bron === 'ontvangen' ? 'ontvangen' : 'ik';
+    l.leuk = !!l.leuk;
+    l.bewaard = !!l.bewaard;
+    l.occasion = l.occasion || '';
+    return l;
+  }
+
+  function getLook(id) {
+    for (var i = 0; i < state.looks.length; i++) if (state.looks[i].id === id) return state.looks[i];
+    return null;
+  }
+
+  async function saveLook(look) {
+    look.updatedAt = Date.now();
+    await KastDB.put(KastDB.LOOKS, look);
+    upsert(state.looks, look);
+  }
+
+  async function deleteLook(id) {
+    var l = getLook(id);
+    if (l) {
+      // De foto's van een look hangen aan niets anders, dus die mogen mee.
+      var beelden = [l.coverImageId].concat(l.stukken.map(function (st) { return st.imageId; }));
+      for (var i = 0; i < beelden.length; i++) {
+        if (!beelden[i]) continue;
+        await KastDB.remove(KastDB.IMAGES, beelden[i]);
+        forgetImage(beelden[i]);
+      }
+    }
+    await KastDB.remove(KastDB.LOOKS, id);
+    state.looks = state.looks.filter(function (x) { return x.id !== id; });
+  }
+
+  function gefilterdeLooks() {
+    var f = state.lookFilter;
+    return state.looks.filter(function (l) {
+      if (f.occasion && l.occasion !== f.occasion) return false;
+      if (f.season && (l.seasons || []).length && l.seasons.indexOf(f.season) === -1) return false;
+      if (f.bron && l.bron !== f.bron) return false;
+      if (f.alleenBewaard && !l.bewaard) return false;
+      if (f.alleenLeuk && !l.leuk) return false;
+      if (f.color) {
+        var heeft = l.stukken.some(function (st) { return (st.kleuren || []).indexOf(f.color) !== -1; });
+        if (!heeft) return false;
+      }
+      return true;
+    }).sort(function (a, b) { return b.createdAt - a.createdAt; });
+  }
+
+  function lookFilterActief() {
+    var f = state.lookFilter;
+    return !!(f.occasion || f.season || f.color || f.bron || f.alleenBewaard || f.alleenLeuk);
+  }
+
+  function viewInspiratie() {
+    if (!state.looks.length) {
+      return emptyState('💡', 'Nog geen looks',
+        'Hier komen looks te staan: die van jou zodra je er een deelt, en die van anderen ' +
+        'zodra je er een krijgt. Elk kledingstuk kan een winkellink hebben, zodat je meteen ' +
+        'ziet waar het te koop is.',
+        '<div class="empty-actions">' +
+          (state.outfits.length
+            ? '<a class="btn btn-primary" href="#/outfits">Een outfit delen</a>'
+            : '<a class="btn btn-primary" href="#/stylist">Eerst een outfit maken</a>') +
+          '<button class="btn btn-ghost" data-act="look-import">Look van iemand toevoegen</button>' +
+        '</div>');
+    }
+
+    var lijst = gefilterdeLooks();
+    return '' +
+      '<div class="style-top">' +
+        '<div class="chips scroll-x">' +
+          '<button type="button" class="chip' + (state.lookFilter.alleenLeuk ? ' active' : '') + '" ' +
+            'data-act="look-filter-leuk">❤️ Leuk</button>' +
+          '<button type="button" class="chip' + (state.lookFilter.alleenBewaard ? ' active' : '') + '" ' +
+            'data-act="look-filter-bewaard">🔖 Bewaard</button>' +
+          chipRow([
+            { key: 'ik', label: 'Van mij' },
+            { key: 'ontvangen', label: 'Gekregen' }
+          ], state.lookFilter.bron, 'look-filter-bron') +
+        '</div>' +
+        '<div class="chips scroll-x">' +
+          chipRow(OCCASIONS, state.lookFilter.occasion, 'look-filter-occasion', { allLabel: 'Alle' }) +
+        '</div>' +
+        '<div class="chips scroll-x">' +
+          chipRow(SEASONS, state.lookFilter.season, 'look-filter-season', { allLabel: 'Heel jaar' }) +
+          chipRow(COLORS, state.lookFilter.color, 'look-filter-color', { allLabel: 'Alle kleuren' }) +
+        '</div>' +
+      '</div>' +
+      (lijst.length
+        ? '<div class="feed">' + lijst.map(lookKaart).join('') + '</div>'
+        : '<div class="empty small"><div class="empty-icon">🔍</div>' +
+          '<p class="empty-text">Geen looks met deze filters.</p>' +
+          '<button class="btn btn-ghost" data-act="look-filter-reset">Filters wissen</button></div>') +
+      (lookFilterActief()
+        ? ''
+        : '<p class="footer-note">Looks komen van jou en van mensen die je er een sturen. ' +
+          'Er is geen centrale tijdlijn — alles blijft op je eigen telefoon.</p>');
+  }
+
+  /* Eén kaart in de rij: groot beeld, wie hem maakte, en de winkellinks die
+     eronder zitten — dat laatste is waar het hier om draait. */
+  function lookKaart(l) {
+    var teKoop = l.stukken.filter(function (st) { return !!st.link; });
+    return '<article class="look" data-look="' + esc(l.id) + '">' +
+      '<a class="look-beeld" href="#/look/' + esc(l.id) + '">' +
+        lookBeeld(l) +
+        (l.bron === 'ontvangen' && l.maker
+          ? '<span class="look-maker">' + esc(l.maker) + '</span>'
+          : '<span class="look-maker eigen">Van jou</span>') +
+        (teKoop.length ? '<span class="look-shop">🛍️ ' + teKoop.length + '</span>' : '') +
+      '</a>' +
+      '<div class="look-body">' +
+        '<a class="look-naam" href="#/look/' + esc(l.id) + '">' + esc(l.naam || 'Naamloze look') + '</a>' +
+        '<span class="look-meta">' + plural(l.stukken.length, 'stuk', 'stukken') +
+          (l.occasion ? ' · ' + esc((occasionMap[l.occasion] || {}).label || l.occasion) : '') + '</span>' +
+        (l.notitie ? '<p class="look-notitie">' + esc(l.notitie) + '</p>' : '') +
+        (teKoop.length
+          ? '<div class="look-links">' + teKoop.slice(0, 3).map(function (st) {
+              return '<a class="shop-pil" href="' + esc(st.link) + '" target="_blank" rel="noopener noreferrer">' +
+                '🛍️ ' + esc(st.naam || winkelNaam(st.link)) + '</a>';
+            }).join('') +
+            (teKoop.length > 3
+              ? '<a class="shop-pil meer" href="#/look/' + esc(l.id) + '">+' + (teKoop.length - 3) + '</a>'
+              : '') +
+          '</div>'
+          : '') +
+        '<div class="look-acties">' +
+          '<button type="button" class="look-knop' + (l.leuk ? ' aan' : '') + '" ' +
+            'data-act="look-leuk" data-id="' + esc(l.id) + '" aria-pressed="' + (l.leuk ? 'true' : 'false') + '">' +
+            (l.leuk ? '❤️' : '🤍') + ' <span>Leuk</span></button>' +
+          '<button type="button" class="look-knop' + (l.bewaard ? ' aan' : '') + '" ' +
+            'data-act="look-bewaar" data-id="' + esc(l.id) + '" aria-pressed="' + (l.bewaard ? 'true' : 'false') + '">' +
+            (l.bewaard ? '🔖' : '📑') + ' <span>Bewaren</span></button>' +
+          '<a class="look-knop" href="#/look/' + esc(l.id) + '">👀 <span>Bekijken</span></a>' +
+        '</div>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function lookBeeld(l, cls) {
+    var cover = l.coverImageId ||
+      (l.stukken.filter(function (st) { return st.imageId; })[0] || {}).imageId;
+    if (cover) {
+      return '<div class="' + (cls || 'look-foto') + ' laadt">' +
+        '<div class="ph-fallback"><span>✨</span></div>' +
+        '<img class="ph-img" data-img="' + esc(cover) + ':full" alt=""></div>';
+    }
+    // Zonder foto een collage van de losse stukken, net als bij een outfit.
+    var cellen = l.stukken.slice(0, 4);
+    if (!cellen.length) return '<div class="' + (cls || 'look-foto') + ' empty-collage"><span>✨</span></div>';
+    return '<div class="' + (cls || 'look-foto') + ' look-collage cells-' + cellen.length + '">' +
+      cellen.map(function (st) {
+        return '<div class="collage-cell laadt">' +
+          '<div class="ph-fallback"><span>' + ((catMap[st.categorie] || catMap.overig).icon) + '</span></div>' +
+          (st.imageId ? '<img class="ph-img" data-img="' + esc(st.imageId) + ':thumb" alt="">' : '') +
+        '</div>';
+      }).join('') + '</div>';
+  }
+
+  function viewLookDetail(id) {
+    var l = getLook(id);
+    if (!l) return emptyState('🤔', 'Niet gevonden', 'Deze look bestaat niet meer.',
+      '<a class="btn btn-primary" href="#/inspiratie">Naar inspiratie</a>');
+
+    return '<div class="detail">' +
+      '<div class="detail-photo">' + lookBeeld(l, 'look-foto groot') + '</div>' +
+      '<div class="detail-body">' +
+        '<div class="detail-head">' +
+          '<h2 class="detail-title">' + esc(l.naam || 'Naamloze look') + '</h2>' +
+          '<button class="icon-btn star' + (l.leuk ? ' on' : '') + '" data-act="look-leuk" ' +
+            'data-id="' + esc(l.id) + '" aria-label="Leuk">' + (l.leuk ? '❤️' : '🤍') + '</button>' +
+        '</div>' +
+        '<div class="meta-list">' +
+          metaRow('Van', l.bron === 'ontvangen' ? (l.maker || 'iemand anders') : 'jou') +
+          (l.occasion ? metaRow('Gelegenheid', (occasionMap[l.occasion] || {}).label || l.occasion) : '') +
+          metaRow('Seizoen', (l.seasons || []).length
+            ? l.seasons.map(function (x) { return (seasonMap[x] || {}).label || x; }).join(', ')
+            : 'Het hele jaar door') +
+          metaRow('Toegevoegd', formatDate(new Date(l.createdAt).toISOString().slice(0, 10))) +
+        '</div>' +
+        (l.notitie ? '<p class="notes">' + esc(l.notitie) + '</p>' : '') +
+
+        '<button class="btn ' + (l.bewaard ? 'btn-secondary' : 'btn-primary') + ' btn-block" ' +
+          'data-act="look-bewaar" data-id="' + esc(l.id) + '">' +
+          (l.bewaard ? '🔖 Bewaard — toch niet' : '📑 Bewaren als inspiratie') + '</button>' +
+
+        '<h3 class="section-title">Wat erin zit (' + l.stukken.length + ')</h3>' +
+        '<div class="list">' + l.stukken.map(function (st, i) {
+          var cat = catMap[st.categorie] || catMap.overig;
+          return '<div class="list-item column">' +
+            '<div class="list-line">' +
+              '<div class="list-thumb laadt">' +
+                '<div class="ph-fallback"><span>' + cat.icon + '</span></div>' +
+                (st.imageId ? '<img class="ph-img" data-img="' + esc(st.imageId) + ':thumb" alt="">' : '') +
+              '</div>' +
+              '<span class="list-text"><b>' + esc(st.naam || 'Naamloos') + '</b>' +
+              '<span class="list-sub">' + esc(cat.label) +
+                (st.merk ? ' · ' + esc(st.merk) : '') + '</span></span>' +
+            '</div>' +
+            (st.link
+              ? '<a class="btn btn-secondary winkel-knop" href="' + esc(st.link) + '" ' +
+                  'target="_blank" rel="noopener noreferrer">🛍️ Bekijk bij ' + esc(winkelNaam(st.link)) + '</a>'
+              : '<p class="hint">Geen winkellink bij dit stuk.</p>') +
+            '<span class="sr-only">' + (i + 1) + '</span>' +
+          '</div>';
+        }).join('') + '</div>' +
+
+        '<div class="row-actions">' +
+          '<button class="btn btn-secondary" data-act="look-deel" data-id="' + esc(l.id) + '">📤 Doorsturen</button>' +
+          '<button class="btn btn-danger" data-act="look-weg" data-id="' + esc(l.id) + '">Verwijderen</button>' +
+        '</div>' +
+      '</div></div>';
+  }
+
+  /* ── Een eigen outfit als look publiceren ──
+     De foto's worden gekopieerd, zodat het weghalen van een kledingstuk uit je
+     kast de look niet uitholt. */
+  async function publiceerLook(outfitId) {
+    var o = getOutfit(outfitId);
+    if (!o) return;
+    var items = o.itemIds.map(getItem).filter(Boolean);
+    if (!items.length && !coverImageOf(o)) {
+      toast('Zet er eerst kleding of een foto in');
+      return;
+    }
+    toonBezig('Look klaarmaken…');
+    var look = newLook();
+    look.naam = o.name || 'Naamloze look';
+    look.occasion = o.occasion || '';
+    look.seasons = (o.seasons || []).slice();
+    look.notitie = o.notes || '';
+    look.bron = 'ik';
+
+    var eigen = coverImageOf(o);
+    if (eigen) look.coverImageId = await kopieerBeeld(eigen);
+
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var beeld = coverImageOf(it);
+      look.stukken.push({
+        naam: it.name || 'Naamloos',
+        categorie: it.category,
+        kleuren: (it.colors || []).slice(),
+        merk: it.brand || '',
+        link: netteLink(it.link),
+        imageId: beeld ? await kopieerBeeld(beeld) : null
+      });
+    }
+    await saveLook(look);
+    verbergBezig();
+    go('#/look/' + look.id);
+    toast('Look staat in je inspiratie');
+  }
+
+  async function kopieerBeeld(id) {
+    var rec = await KastDB.get(KastDB.IMAGES, id);
+    if (!rec) return null;
+    var nid = uid('img');
+    await KastDB.put(KastDB.IMAGES, { id: nid, full: rec.full, thumb: rec.thumb });
+    return nid;
+  }
+
+  /* ── Doorsturen en ontvangen ──
+     Een look is klein genoeg om als bestand te delen: één foto per stuk. */
+  async function deelLook(id) {
+    var l = getLook(id);
+    if (!l) return;
+    toonBezig('Look inpakken…');
+    var beelden = [];
+    var ids = [l.coverImageId].concat(l.stukken.map(function (st) { return st.imageId; }));
+    for (var i = 0; i < ids.length; i++) {
+      if (!ids[i]) continue;
+      var rec = await KastDB.get(KastDB.IMAGES, ids[i]);
+      if (!rec) continue;
+      beelden.push({ id: ids[i], full: await blobToDataUrl(rec.full), thumb: await blobToDataUrl(rec.thumb) });
+    }
+    var payload = {
+      app: 'kledingkast', kind: 'look', version: 1,
+      look: JSON.parse(JSON.stringify(l)),
+      images: beelden
+    };
+    var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    var naam = 'look-' + (l.naam || 'look').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.json';
+    verbergBezig();
+
+    if (typeof File === 'function' && navigator.canShare) {
+      var file = new File([blob], naam, { type: 'application/json' });
+      if (navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: l.naam || 'Look' }); return; }
+        catch (err) { if (err && err.name === 'AbortError') return; }
+      }
+    }
+    downloadBlob(blob, naam);
+    toast('Look gedownload — stuur dit bestand door');
+  }
+
+  async function neemLookOver(data) {
+    var l = normalizeLook(data.look || {});
+    l.id = uid('look');            // altijd een nieuw id: anders overschrijf je je eigen look
+    l.bron = 'ontvangen';
+    l.leuk = false;
+    l.bewaard = false;
+    l.createdAt = Date.now();
+    if (!l.maker) l.maker = 'Iemand anders';
+
+    // De beelden krijgen ook nieuwe ids, en de verwijzingen erin gaan mee.
+    var kaart = {};
+    var beelden = data.images || [];
+    for (var i = 0; i < beelden.length; i++) {
+      var nid = uid('img');
+      kaart[beelden[i].id] = nid;
+      await KastDB.put(KastDB.IMAGES, {
+        id: nid,
+        full: beelden[i].full ? dataUrlToBlob(beelden[i].full) : null,
+        thumb: beelden[i].thumb ? dataUrlToBlob(beelden[i].thumb) : null
+      });
+    }
+    if (l.coverImageId) l.coverImageId = kaart[l.coverImageId] || null;
+    l.stukken.forEach(function (st) { st.imageId = st.imageId ? (kaart[st.imageId] || null) : null; });
+
+    await saveLook(l);
+    return l;
+  }
+
   /* ─────────────────────────────── Kiezers ───────────────────────────────── */
 
   function openPicker() {
@@ -3723,6 +4128,7 @@
       { href: '#/kast',     icon: '🚪', label: 'Kast',         n: kastAantal, sub: 'in de kast' },
       { href: '#/stylist',  icon: '🪄', label: 'Stylist',      n: null, sub: 'Outfit bouwen' },
       { href: '#/outfits',  icon: '✨', label: 'Outfits',      n: state.outfits.length, sub: 'bewaard' },
+      { href: '#/inspiratie', icon: '💡', label: 'Inspiratie',  n: state.looks.length, sub: 'looks' },
       { href: '#/mappen',   icon: '📁', label: 'Mappen',       n: state.folders.length, sub: 'verzamelingen' },
       { href: '#/agenda',   icon: '🗓️', label: 'Agenda',       n: null, sub: 'Deze week' },
       { href: '#/askim',    icon: '💛', label: 'Mijn Askim',   n: teBeoordelen || null,
@@ -3778,6 +4184,7 @@
     var payload = {
       app: 'kledingkast', version: 2, exportedAt: new Date().toISOString(),
       items: state.items, outfits: state.outfits, folders: state.folders, images: out,
+      looks: state.looks,   // de inspiratie hoort ook bij je kast
       weer: alleWeer()      // temperaturen per dag; klein, dus gewoon mee
     };
     return new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -3990,6 +4397,19 @@
     var text = await file.text();
     var data;
     try { data = JSON.parse(text); } catch (e) { toast('Dit bestand kan ik niet lezen'); return; }
+
+    // Hetzelfde bestandsvak doet twee dingen: een hele back-up of één look.
+    // Aan "kind" zie je wat er binnenkomt.
+    if (data && data.app === 'kledingkast' && data.kind === 'look' && data.look) {
+      toonBezig('Look toevoegen…');
+      var nieuw = await neemLookOver(data);
+      verbergBezig();
+      render();
+      go('#/look/' + nieuw.id);
+      toast('Look toegevoegd aan je inspiratie');
+      return;
+    }
+
     if (!data || data.app !== 'kledingkast' || !Array.isArray(data.items)) {
       toast('Dit is geen kledingkast-back-up');
       return;
@@ -4033,6 +4453,7 @@
     await KastDB.putMany(KastDB.ITEMS, data.items.map(normalizeItem));
     await KastDB.putMany(KastDB.OUTFITS, (data.outfits || []).map(normalizeOutfit));
     await KastDB.putMany(KastDB.FOLDERS, folders);
+    await KastDB.putMany(KastDB.LOOKS, (data.looks || []).map(normalizeLook));
     if (data.weer && typeof data.weer === 'object') {
       weerCache = data.weer;
       try { localStorage.setItem(WEER_KEY, JSON.stringify(data.weer)); } catch (e) { /* privémodus */ }
@@ -4695,6 +5116,55 @@
     'paste-choices': function () { openPasteCode(); },
     'ga-wasmand': function () { state.filters.vak = 'laundry'; go('#/kast'); },
 
+    /* ── Inspiratie ── */
+    'look-publiceer': function (btn) { publiceerLook(btn.getAttribute('data-id')); },
+    'look-deel': function (btn) { deelLook(btn.getAttribute('data-id')); },
+    'look-import': function () { els.fileImport.click(); },
+    'look-leuk': async function (btn) {
+      var l = getLook(btn.getAttribute('data-id'));
+      if (!l) return;
+      l.leuk = !l.leuk;
+      if (l.leuk) sterrenBui(btn);
+      await saveLook(l);
+      render();
+    },
+    'look-bewaar': async function (btn) {
+      var l = getLook(btn.getAttribute('data-id'));
+      if (!l) return;
+      l.bewaard = !l.bewaard;
+      await saveLook(l);
+      render();
+      toast(l.bewaard ? 'Bewaard als inspiratie' : 'Niet meer bewaard');
+    },
+    'look-weg': async function (btn) {
+      var id = btn.getAttribute('data-id');
+      var l = getLook(id);
+      if (!l) return;
+      var ok = await confirmDialog({
+        title: 'Look verwijderen?',
+        body: '"' + (l.naam || 'Naamloze look') + '" verdwijnt uit je inspiratie. Je eigen kast blijft zoals hij is.',
+        confirmLabel: 'Verwijderen', danger: true
+      });
+      if (!ok) return;
+      await deleteLook(id);
+      go('#/inspiratie');
+      toast('Look verwijderd');
+    },
+    'look-filter-occasion': function (btn) { state.lookFilter.occasion = btn.getAttribute('data-val'); render(); },
+    'look-filter-season': function (btn) { state.lookFilter.season = btn.getAttribute('data-val'); render(); },
+    'look-filter-color': function (btn) { state.lookFilter.color = btn.getAttribute('data-val'); render(); },
+    'look-filter-bron': function (btn) {
+      var v = btn.getAttribute('data-val');
+      state.lookFilter.bron = state.lookFilter.bron === v ? '' : v;
+      render();
+    },
+    'look-filter-leuk': function () { state.lookFilter.alleenLeuk = !state.lookFilter.alleenLeuk; render(); },
+    'look-filter-bewaard': function () { state.lookFilter.alleenBewaard = !state.lookFilter.alleenBewaard; render(); },
+    'look-filter-reset': function () {
+      state.lookFilter = { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false };
+      render();
+    },
+
     /* "Houden" verandert niets aan het stuk maar zet de teller op vandaag,
        zodat het niet volgende week weer bovenaan de opruimlijst staat. */
     'opruim-houden': async function (btn) {
@@ -4843,7 +5313,7 @@
     'wipe': async function () {
       var ok = await confirmDialog({
         title: 'Alles verwijderen?',
-        body: 'Al je kledingstukken, outfits, mappen en foto\'s worden gewist. Dit kan niet ongedaan worden gemaakt.',
+        body: 'Al je kledingstukken, outfits, mappen, looks en foto\'s worden gewist. Dit kan niet ongedaan worden gemaakt.',
         confirmLabel: 'Alles wissen', danger: true
       });
       if (!ok) return;
@@ -5027,7 +5497,8 @@
     var res = await Promise.all([
       KastDB.getAll(KastDB.ITEMS),
       KastDB.getAll(KastDB.OUTFITS),
-      KastDB.getAll(KastDB.FOLDERS)
+      KastDB.getAll(KastDB.FOLDERS),
+      KastDB.getAll(KastDB.LOOKS)
     ]);
     // Oudere of geïmporteerde records missen soms een veld; hier één keer rechtzetten.
     state.items = (res[0] || []).map(normalizeItem);
@@ -5038,6 +5509,7 @@
       f.packed = f.packed || [];
       return f;
     });
+    state.looks = (res[3] || []).map(normalizeLook);
   }
 
   async function init() {

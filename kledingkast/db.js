@@ -6,11 +6,12 @@
   'use strict';
 
   var DB_NAME = 'kledingkast';
-  var DB_VERSION = 2;
+  var DB_VERSION = 3;
   var STORE_ITEMS = 'items';
   var STORE_OUTFITS = 'outfits';
   var STORE_IMAGES = 'images';
   var STORE_FOLDERS = 'folders';
+  var STORE_LOOKS = 'looks';
 
   var dbPromise = null;
 
@@ -32,6 +33,10 @@
         // v2: mappen om outfits in te verzamelen
         if (!db.objectStoreNames.contains(STORE_FOLDERS)) {
           db.createObjectStore(STORE_FOLDERS, { keyPath: 'id' });
+        }
+        // v3: looks — gedeelde outfits, van jou of van iemand anders gekregen
+        if (!db.objectStoreNames.contains(STORE_LOOKS)) {
+          db.createObjectStore(STORE_LOOKS, { keyPath: 'id' });
         }
         void ev;
       };
@@ -101,11 +106,9 @@
   }
 
   function clearAll() {
-    return tx([STORE_ITEMS, STORE_OUTFITS, STORE_IMAGES, STORE_FOLDERS], 'readwrite').then(function (t) {
-      t.objectStore(STORE_ITEMS).clear();
-      t.objectStore(STORE_OUTFITS).clear();
-      t.objectStore(STORE_IMAGES).clear();
-      t.objectStore(STORE_FOLDERS).clear();
+    var alles = [STORE_ITEMS, STORE_OUTFITS, STORE_IMAGES, STORE_FOLDERS, STORE_LOOKS];
+    return tx(alles, 'readwrite').then(function (t) {
+      alles.forEach(function (naam) { t.objectStore(naam).clear(); });
       return done(t, true);
     });
   }
@@ -115,6 +118,7 @@
     OUTFITS: STORE_OUTFITS,
     IMAGES: STORE_IMAGES,
     FOLDERS: STORE_FOLDERS,
+    LOOKS: STORE_LOOKS,
     open: open,
     getAll: getAll,
     get: get,

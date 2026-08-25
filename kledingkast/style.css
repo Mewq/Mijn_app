@@ -3438,3 +3438,152 @@ input, textarea, select { font: inherit; }
   text-indent: 0;
   color: var(--ink);
 }
+
+/* ════════════════════════════ Inspiratie ══════════════════════════════
+   Een rij looks onder elkaar om doorheen te scrollen. Elke kaart is groot
+   genoeg om iets van te vinden, met de winkellinks vlak onder het beeld —
+   dat is waar het hier om draait. */
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px;
+}
+
+.look {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.look-beeld { position: relative; display: block; }
+
+.look-foto {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  background: var(--surface-2);
+}
+
+.look-foto.groot { aspect-ratio: 4 / 5; border-radius: var(--radius); box-shadow: var(--shadow); }
+.look-foto .ph-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.look-foto .ph-fallback { font-size: 34px; }
+
+.look-collage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.look-collage.cells-1 { grid-template-columns: 1fr; }
+.look-collage.cells-3 > :first-child { grid-row: span 2; }
+.look-collage .collage-cell { border-radius: 0; }
+
+/* Wie hem gemaakt heeft, linksboven op het beeld. */
+.look-maker,
+.look-shop {
+  position: absolute;
+  top: 10px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(20, 17, 15, .58);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.look-maker { left: 10px; }
+.look-maker.eigen { background: color-mix(in srgb, var(--accent) 82%, transparent); }
+.look-shop { right: 10px; }
+
+.look-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 12px; }
+
+.look-naam {
+  font-family: var(--font-display);
+  font-size: 17.5px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
+
+.look-meta { font-size: 12.5px; color: var(--ink-faint); }
+.look-notitie { font-size: 13.5px; color: var(--ink-soft); }
+
+/* De winkellinks: kleine pillen met de naam van het stuk erop. */
+.look-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+.shop-pil {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 6px 11px;
+  border-radius: 100px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-pil.meer { background: transparent; }
+
+.look-acties {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.look-knop {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 38px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.look-knop.aan { color: var(--accent); background: var(--accent-soft); }
+.look-knop:active { transform: scale(.95); }
+
+/* De winkelknop op een kledingstuk en in een look. */
+.winkel-knop { margin-top: 8px; }
+.list-item.column .winkel-knop { width: 100%; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Zes tabbladen: iets krapper, anders passen de woorden niet. */
+.tabbar { --tab-krap: 1; }
+.tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 420px) {
+  .tab { font-size: 9.5px; }
+  .tab-icon { font-size: 18px; }
+}
+
+[data-style="apple"] .look { border-radius: 24px; }
+[data-style="apple"] .look-knop { border-radius: 100px; }
+[data-style="apple"] .shop-pil { border-color: transparent; }
