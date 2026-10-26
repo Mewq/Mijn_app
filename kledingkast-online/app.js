@@ -119,6 +119,7 @@
     feedTab: 'community',   // 'community' of 'mijn'
     account: null,          // wie er ingelogd is, zodra de server dat bevestigt
     blokkades: null,        // null = nog niet opgehaald, [] = opgehaald en leeg
+    bord: null,             // het outfitbord; pas gevuld als je het opent
     lookFilter: { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false },
     duel: null,             // de twee outfits die nu tegenover elkaar staan
     wearMode: false         // tikken in de kast = vandaag gedragen
@@ -642,7 +643,756 @@
     else root.removeAttribute('data-theme');
   }
 
-  /* ───────────────────────────── Afbeeldingen ────────────────────────────── */
+  /* ═══════════════════════════ Het outfitbord ════════════════════════════
+     Een leeg vlak waar je kledingstukken op legt, verschuift, draait en over
+     elkaar heen schikt — zoals je ze op bed zou leggen voordat je ze aantrekt.
+
+     De stukken zijn gewone <img>-elementen met een transform, geen tekeningen
+     op een canvas. Dat scheelt een hoop: de browser doet het schalen, een
+     uitgeknipt stuk blijft scherp, en je kunt met de muis of je vinger
+     rechtstreeks op het stuk zelf mikken. Pas bij het bewaren gaat alles één
+     keer door een canvas, om er een plaatje van te maken. */
+
+  var BORD_ACHTERGRONDEN = [
+    { key: 'papier', label: 'Papier' },
+    { key: 'wit', label: 'Wit' },
+    { key: 'zacht', label: 'Zacht' },
+    { key: 'donker', label: 'Donker' }
+  ];
+
+  function leegBord() {
+    return { stukken: [], achtergrond: 'papier', gekozen: null, outfitId: null, naam: '' };
+  }
+
+  function bordItem(st) {
+    return getItem(st.itemId);
+  }
+
+  function viewBord() {
+    var b = state.bord;
+    var kaartjes = b.stukken.map(function (st, n) {
+      var it = bordItem(st);
+      return '<img class="bord-stuk' + (b.gekozen === n ? ' gekozen' : '') + '" ' +
+        'data-bord="' + n + '" ' +
+        'style="' + bordStijl(st) + '" ' +
+        'data-img="' + esc(st.imageId) + ':cut" ' +
+        'alt="' + esc(it ? it.name : '') + '">';
+    }).join('');
+
+    var gekozen = b.gekozen != null ? b.stukken[b.gekozen] : null;
+
+    return '<div class="bord-scherm">' +
+      '<div class="bord-wrap">' +
+        '<div class="bord" id="bord" data-achtergrond="' + esc(b.achtergrond) + '">' +
+          kaartjes +
+          (b.stukken.length ? '' :
+            '<div class="bord-leeg"><span>👕</span>' +
+            '<p>Tik hieronder op een kledingstuk om het neer te leggen.</p></div>') +
+          '<button type="button" class="bord-greep" id="bordGreep" hidden ' +
+            'aria-label="Draaien en groter maken">⤢</button>' +
+        '</div>' +
+      '</div>' +
+
+      (gekozen
+        ? '<div class="bord-balk">' +
+            bordKnop('bord-achter', '↓', 'Achter') +
+            bordKnop('bord-voor', '↑', 'Voor') +
+            bordKnop('bord-spiegel', '⇄', 'Spiegel') +
+            bordKnop('bord-rechtop', '⌖', 'Recht') +
+            bordKnop('bord-weg', '✕', 'Weg', true) +
+          '</div>'
+        : '<p class="bord-tip">Sleep om te verschuiven. Sleep aan het hoekje om te draaien en ' +
+          'groter te maken. Met twee vingers kan het ook.</p>') +
+
+      '<div class="chips scroll-x bord-kleuren">' +
+        BORD_ACHTERGRONDEN.map(function (a) {
+          return '<button type="button" class="chip' + (b.achtergrond === a.key ? ' active' : '') + '" ' +
+            'data-act="bord-achtergrond" data-val="' + a.key + '">' + esc(a.label) + '</button>';
+        }).join('') +
+      '</div>' +
+
+      bordLade() +
+
+      '<div class="bord-acties">' +
+        '<button class="btn btn-primary btn-block" data-act="bord-bewaar"' +
+          (b.stukken.length ? '' : ' disabled') + '>' +
+          (b.outfitId ? 'Outfit bijwerken' : 'Bewaren als outfit') + '</button>' +
+        '<button class="btn btn-ghost btn-block" data-act="bord-leeg">Bord leegmaken</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* Een los teken zegt te weinig op een knop van twee centimeter; het woordje
+     eronder maakt het verschil tussen gokken en weten. */
+  function bordKnop(actie, teken, label, gevaar) {
+    return '<button type="button" class="bord-knop' + (gevaar ? ' weg' : '') + '" ' +
+      'data-act="' + actie + '"><span class="bk-teken">' + teken + '</span>' +
+      '<span class="bk-label">' + esc(label) + '</span></button>';
+  }
+
+  function bordStijl(st) {
+    return 'left:' + (st.x * 100) + '%;top:' + (st.y * 100) + '%;' +
+      // Zonder gemeten verhouding nog even niets: pasMaat() vult hem zo in.
+      (st.breedte == null ? 'visibility:hidden;width:40%;' : 'width:' + (st.breedte * 100) + '%;') +
+      'transform:translate(-50%,-50%) rotate(' + st.r + 'deg) scale(' + (st.flip ? -1 : 1) + ',1);' +
+      'z-index:' + (st.laag || 1) + ';';
+  }
+
+  /* De lade onderin: je kast, per categorie, om uit te kiezen. Stukken met een
+     uitknipsel eerst — die liggen het mooist op het bord. */
+  function bordLade() {
+    var bruikbaar = state.items.filter(function (i) {
+      return !i.donate && i.coverImageId;
+    });
+    if (!bruikbaar.length) {
+      return '<div class="bord-lade leeg"><p class="hint block">Je kast is nog leeg. ' +
+        'Voeg eerst een kledingstuk met een foto toe.</p></div>';
+    }
+    var perCat = {};
+    bruikbaar.forEach(function (i) {
+      (perCat[i.category] || (perCat[i.category] = [])).push(i);
+    });
+    var volgorde = CATEGORIES.map(function (c) { return c.key; })
+      .filter(function (k) { return perCat[k] && perCat[k].length; });
+
+    return '<div class="bord-lade">' + volgorde.map(function (key) {
+      var cat = catMap[key] || catMap.overig;
+      var lijst = perCat[key].slice().sort(function (a, b) {
+        return (knipselIds[b.coverImageId] ? 1 : 0) - (knipselIds[a.coverImageId] ? 1 : 0);
+      });
+      return '<div class="lade-groep">' +
+        '<span class="lade-kop">' + cat.icon + ' ' + esc(cat.label) + '</span>' +
+        '<div class="rail lade-rail">' + lijst.map(function (it) {
+          return '<button type="button" class="lade-tegel' +
+            (knipselIds[it.coverImageId] ? ' knip' : '') + '" ' +
+            'data-act="bord-leg" data-id="' + esc(it.id) + '" title="' + esc(it.name || '') + '">' +
+            '<img class="ph-img" data-img="' + esc(it.coverImageId) + ':cut" alt="">' +
+          '</button>';
+        }).join('') + '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* Waar een stuk landt hangt af van wát het is. De app weet de categorie, dus
+     een trui hoort bovenaan en schoenen onderaan — dan staat er meteen iets
+     dat op een outfit lijkt in plaats van een stapel op één punt. Jassen een
+     tikje naar links, tassen naar rechts, zodat ze niet over de rest vallen. */
+  var BORD_PLEK = {
+    tops:        { x: 0.50, y: 0.27 },
+    truien:      { x: 0.50, y: 0.27 },
+    jassen:      { x: 0.24, y: 0.33 },
+    broeken:     { x: 0.50, y: 0.59 },
+    rokken:      { x: 0.50, y: 0.57 },
+    sport:       { x: 0.50, y: 0.45 },
+    ondergoed:   { x: 0.76, y: 0.45 },
+    schoenen:    { x: 0.50, y: 0.86 },
+    tassen:      { x: 0.79, y: 0.68 },
+    accessoires: { x: 0.78, y: 0.24 },
+    overig:      { x: 0.50, y: 0.45 }
+  };
+
+  /* Twee broeken op dezelfde plek zouden elkaar precies bedekken; elke
+     volgende in dezelfde hoek schuift een stukje op. */
+  function bordPlek(b, categorie) {
+    var basis = BORD_PLEK[categorie] || BORD_PLEK.overig;
+    var zelfde = b.stukken.filter(function (s) {
+      var it = getItem(s.itemId);
+      return it && (BORD_PLEK[it.category] || BORD_PLEK.overig) === basis;
+    }).length;
+    return {
+      x: Math.min(0.92, Math.max(0.08, basis.x + zelfde * 0.09)),
+      y: Math.min(0.92, Math.max(0.08, basis.y + zelfde * 0.05))
+    };
+  }
+
+  function bordLeg(itemId) {
+    var it = getItem(itemId);
+    if (!it || !it.coverImageId) return;
+    var b = state.bord;
+    var n = b.stukken.length;
+    var plek = bordPlek(b, it.category);
+    b.stukken.push({
+      itemId: it.id,
+      imageId: it.coverImageId,
+      x: plek.x,
+      y: plek.y,
+      breedte: null,          // volgt uit de verhouding van de foto
+      r: 0,
+      flip: false,
+      laag: n + 1
+    });
+    b.gekozen = b.stukken.length - 1;
+    render();
+    /* De lade staat onder het bord, dus bij het kiezen is het bord vaak net
+       uit beeld gescrold. Je wilt zien waar je stuk landt. */
+    bordInBeeld();
+    if (!knipselIds[it.coverImageId]) {
+      toast('Tip: haal de achtergrond weg, dan ligt dit stuk los');
+    }
+  }
+
+  function bordInBeeld() {
+    var el = document.getElementById('bord');
+    if (!el || !el.scrollIntoView) return;
+    var rustig = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try {
+      el.scrollIntoView({ block: 'center', behavior: rustig ? 'auto' : 'smooth' });
+    } catch (e) { el.scrollIntoView(); }
+  }
+
+  /* Hoe groot komt een stuk binnen? Niet op een vaste breedte: een broek is
+     smal en hoog, een paar schoenen breed en laag. Allebei moeten ze passen in
+     hetzelfde vak van het bord, dus de maat volgt uit de verhouding van de
+     foto. Die kennen we pas als de foto geladen is. */
+  var BORD_VAK = 0.45;        // deel van het bord dat één stuk mag vullen
+  var BORD_VERHOUDING = 1.25; // het bord is 4:5, dus hoog / breed
+
+  function pasMaat(bord) {
+    var b = state.bord;
+    var veranderd = false;
+    Array.prototype.forEach.call(bord.querySelectorAll('.bord-stuk'), function (img) {
+      var n = Number(img.getAttribute('data-bord'));
+      var st = b.stukken[n];
+      if (!st || st.breedte != null) return;
+      if (!img.naturalWidth || !img.naturalHeight) {
+        img.addEventListener('load', function () { pasMaat(bord); }, { once: true });
+        return;
+      }
+      var verhouding = img.naturalWidth / img.naturalHeight;
+      st.breedte = BORD_VAK * Math.min(1, BORD_VERHOUDING * verhouding);
+      img.setAttribute('style', bordStijl(st));
+      veranderd = true;
+    });
+    if (veranderd) plaatsGreep();
+  }
+
+  /* Alle aanraking op het bord. Eén vinger verschuift, twee vingers draaien en
+     schalen, en het hoekje doet allebei tegelijk met de muis. */
+  function bordHang() {
+    var bord = document.getElementById('bord');
+    if (!bord) return;
+    pasMaat(bord);
+    var b = state.bord;
+    var vingers = new Map();
+    var sleep = null;
+
+    function stukVan(ev) {
+      var el = ev.target.closest ? ev.target.closest('.bord-stuk') : null;
+      if (!el) return null;
+      return { el: el, n: Number(el.getAttribute('data-bord')) };
+    }
+
+    function maat() { return bord.getBoundingClientRect(); }
+
+    function zet(n) {
+      var el = bord.querySelector('.bord-stuk[data-bord="' + n + '"]');
+      if (el) el.setAttribute('style', bordStijl(b.stukken[n]));
+    }
+
+    function kies(n) {
+      if (b.gekozen === n) return;
+      b.gekozen = n;
+      render();
+    }
+
+    bord.addEventListener('pointerdown', function (ev) {
+      var raak = stukVan(ev);
+      if (!raak) {
+        if (b.gekozen != null) { b.gekozen = null; render(); }
+        return;
+      }
+      ev.preventDefault();
+      bord.setPointerCapture(ev.pointerId);
+      vingers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+      if (vingers.size === 1) {
+        var r = maat();
+        var st = b.stukken[raak.n];
+        sleep = {
+          n: raak.n,
+          greepX: (ev.clientX - r.left) / r.width - st.x,
+          greepY: (ev.clientY - r.top) / r.height - st.y
+        };
+        kies(raak.n);
+      } else if (vingers.size === 2 && sleep) {
+        // Tweede vinger erbij: vanaf nu draaien en schalen in plaats van slepen.
+        var punten = Array.from(vingers.values());
+        var st2 = b.stukken[sleep.n];
+        sleep.twee = {
+          afstand: Math.hypot(punten[0].x - punten[1].x, punten[0].y - punten[1].y) || 1,
+          hoek: Math.atan2(punten[1].y - punten[0].y, punten[1].x - punten[0].x),
+          breedte: st2.breedte,
+          r: st2.r
+        };
+      }
+    });
+
+    bord.addEventListener('pointermove', function (ev) {
+      if (!vingers.has(ev.pointerId) || !sleep) return;
+      vingers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      ev.preventDefault();
+      var st = b.stukken[sleep.n];
+      if (!st) return;
+
+      if (vingers.size >= 2 && sleep.twee) {
+        var p = Array.from(vingers.values());
+        var nu = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1;
+        var hoek = Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x);
+        st.breedte = Math.min(1.6, Math.max(0.06, sleep.twee.breedte * (nu / sleep.twee.afstand)));
+        st.r = sleep.twee.r + (hoek - sleep.twee.hoek) * 180 / Math.PI;
+      } else {
+        var r = maat();
+        st.x = Math.min(1.3, Math.max(-0.3, (ev.clientX - r.left) / r.width - sleep.greepX));
+        st.y = Math.min(1.3, Math.max(-0.3, (ev.clientY - r.top) / r.height - sleep.greepY));
+      }
+      zet(sleep.n);
+    });
+
+    ['pointerup', 'pointercancel'].forEach(function (naam) {
+      bord.addEventListener(naam, function (ev) {
+        vingers['delete'](ev.pointerId);
+        if (!vingers.size) sleep = null;
+        else if (sleep) sleep.twee = null;
+      });
+    });
+
+    // Het hoekje: draaien en groter maken met één vinger of de muis.
+    var greep = document.getElementById('bordGreep');
+    if (greep) {
+      greep.addEventListener('pointerdown', function (ev) {
+        if (b.gekozen == null) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        greep.setPointerCapture(ev.pointerId);
+        var r = maat();
+        var st = b.stukken[b.gekozen];
+        var cx = r.left + st.x * r.width, cy = r.top + st.y * r.height;
+        var start = {
+          afstand: Math.hypot(ev.clientX - cx, ev.clientY - cy) || 1,
+          hoek: Math.atan2(ev.clientY - cy, ev.clientX - cx),
+          breedte: st.breedte,
+          r: st.r
+        };
+        function beweeg(e2) {
+          var nu = Math.hypot(e2.clientX - cx, e2.clientY - cy) || 1;
+          var hoek = Math.atan2(e2.clientY - cy, e2.clientX - cx);
+          st.breedte = Math.min(1.6, Math.max(0.06, start.breedte * (nu / start.afstand)));
+          st.r = start.r + (hoek - start.hoek) * 180 / Math.PI;
+          zet(b.gekozen);
+          plaatsGreep();
+        }
+        function los() {
+          greep.removeEventListener('pointermove', beweeg);
+          greep.removeEventListener('pointerup', los);
+          greep.removeEventListener('pointercancel', los);
+        }
+        greep.addEventListener('pointermove', beweeg);
+        greep.addEventListener('pointerup', los);
+        greep.addEventListener('pointercancel', los);
+      });
+    }
+    plaatsGreep();
+  }
+
+  /* Het hoekje hangt rechtsonder aan het gekozen stuk. */
+  function plaatsGreep() {
+    var greep = document.getElementById('bordGreep');
+    var bord = document.getElementById('bord');
+    if (!greep || !bord) return;
+    var b = state.bord;
+    if (b.gekozen == null || !b.stukken[b.gekozen]) { greep.hidden = true; return; }
+    var el = bord.querySelector('.bord-stuk[data-bord="' + b.gekozen + '"]');
+    if (!el) { greep.hidden = true; return; }
+    var r = el.getBoundingClientRect();
+    var bb = bord.getBoundingClientRect();
+    greep.hidden = false;
+    greep.style.left = (r.right - bb.left) + 'px';
+    greep.style.top = (r.bottom - bb.top) + 'px';
+  }
+
+  /* ── Bewaren ──
+     Het bord wordt één plaatje. Dat plaatje is de omslag van de outfit, en de
+     indeling gaat mee zodat je hem later weer open kunt slaan. */
+  var BORD_VULLING = {
+    papier: '#f2efe9', wit: '#ffffff', zacht: '#ece3d8', donker: '#20201e'
+  };
+
+  async function bordBewaar() {
+    var b = state.bord;
+    if (!b.stukken.length) return;
+    toonBezig('Bord bewaren…');
+    try {
+      var W = 1200, H = 1500;
+      var canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = BORD_VULLING[b.achtergrond] || BORD_VULLING.papier;
+      ctx.fillRect(0, 0, W, H);
+
+      // In dezelfde volgorde als op het scherm: onderste laag eerst.
+      var op = b.stukken.slice().sort(function (p, q) { return (p.laag || 0) - (q.laag || 0); });
+      for (var i = 0; i < op.length; i++) {
+        var st = op[i];
+        var blob = await getImageBlob(st.imageId, 'cut');
+        if (!blob) continue;
+        var bmp = await loadBitmap(blob);
+        var deel = st.breedte != null ? st.breedte
+          : BORD_VAK * Math.min(1, BORD_VERHOUDING * (bmp.width / bmp.height));
+        var breed = deel * W;
+        var hoog = breed * (bmp.height / bmp.width);
+        ctx.save();
+        ctx.translate(st.x * W, st.y * H);
+        ctx.rotate(st.r * Math.PI / 180);
+        if (st.flip) ctx.scale(-1, 1);
+        ctx.drawImage(bmp, -breed / 2, -hoog / 2, breed, hoog);
+        ctx.restore();
+        if (bmp.close) bmp.close();
+      }
+
+      var plaat = await new Promise(function (klaar) {
+        canvas.toBlob(function (x) { klaar(x); }, 'image/jpeg', 0.88);
+      });
+      var mini = await drawToBlob(canvas, 480, 0.75);
+
+      var imgId = uid('img');
+      await KastDB.put(KastDB.IMAGES, { id: imgId, full: plaat, thumb: mini });
+
+      var outfit = b.outfitId ? getOutfit(b.outfitId) : null;
+      var nieuw = !outfit;
+      if (!outfit) {
+        outfit = newOutfit();
+        outfit.name = b.naam || 'Bord van ' + formatDate(todayISO());
+      }
+      var oudBeeld = outfit.coverImageId;
+      outfit.itemIds = op.map(function (s) { return s.itemId; })
+        .filter(function (id, n, lijst) { return lijst.indexOf(id) === n; });
+      outfit.imageIds = [imgId];
+      outfit.coverImageId = imgId;
+      outfit.bord = { achtergrond: b.achtergrond, stukken: op };
+      await saveOutfit(outfit);
+      if (oudBeeld && oudBeeld !== imgId) {
+        await KastDB.remove(KastDB.IMAGES, oudBeeld);
+        forgetImage(oudBeeld);
+      }
+
+      b.outfitId = outfit.id;
+      verbergBezig();
+      await loadAll();
+      go('#/outfit/' + outfit.id);
+      toast(nieuw ? 'Outfit bewaard' : 'Outfit bijgewerkt');
+    } catch (err) {
+      verbergBezig();
+      toast('Bewaren lukte niet');
+    }
+  }
+
+  /* Een bestaande outfit weer op het bord leggen. */
+  function bordOpen(outfitId) {
+    var o = outfitId ? getOutfit(outfitId) : null;
+    if (o && o.bord && o.bord.stukken && o.bord.stukken.length) {
+      state.bord = {
+        stukken: o.bord.stukken.map(function (s) { return Object.assign({}, s); }),
+        achtergrond: o.bord.achtergrond || 'papier',
+        gekozen: null,
+        outfitId: o.id,
+        naam: o.name
+      };
+    } else if (o) {
+      // Nog geen indeling: de stukken van de outfit netjes neerleggen.
+      state.bord = leegBord();
+      state.bord.outfitId = o.id;
+      state.bord.naam = o.name;
+      o.itemIds.forEach(function (id) { bordLegStil(id); });
+    } else {
+      state.bord = leegBord();
+    }
+    go('#/bord');
+  }
+
+  function bordGekozen() {
+    var b = state.bord;
+    return (b && b.gekozen != null) ? b.stukken[b.gekozen] : null;
+  }
+
+  /* Lagen zijn gewone getallen; één stap omhoog betekent boven de buurman
+     uitkomen, niet "de hoogste worden" — anders springt alles door elkaar. */
+  function bordLaag(richting) {
+    var b = state.bord;
+    var st = bordGekozen();
+    if (!st) return;
+    var op = b.stukken.slice().sort(function (p, q) { return (p.laag || 0) - (q.laag || 0); });
+    var plek = op.indexOf(st);
+    var buur = op[plek + richting];
+    if (!buur) return;
+    var bewaar = st.laag;
+    st.laag = buur.laag;
+    buur.laag = bewaar;
+    render();
+  }
+
+  /* Hetzelfde, maar zonder opnieuw tekenen — voor als er in één keer een hele
+     outfit op het bord gelegd wordt. */
+  function bordLegStil(itemId) {
+    var it = getItem(itemId);
+    if (!it || !it.coverImageId) return;
+    var b = state.bord;
+    var plek = bordPlek(b, it.category);
+    b.stukken.push({
+      itemId: it.id, imageId: it.coverImageId,
+      x: plek.x, y: plek.y,
+      breedte: null, r: 0, flip: false, laag: b.stukken.length + 1
+    });
+  }
+
+
+  /* ══════════════════════════ Achtergrond weghalen ═══════════════════════
+     Een uitgeknipt kledingstuk is wat een collage van losse foto's tot een
+     outfit maakt. Het rekenwerk zit in knipsel.js; hier staat alleen het
+     scherm eromheen: een schuifje, een penseel, en eerlijk zijn als het niet
+     gelukt is. */
+
+  var knipsel = null;      // { id, sessie, tolerantie, streken, modus, maat, bezig }
+
+  var KNIP_START = 45;     // de stand die bij de meeste foto's meteen klopt
+
+  /* Een foto kan al in de database staan, of nog los in een formulier dat
+     niet bewaard is. Allebei moeten werken: je wilt uitknippen op het moment
+     dat je de foto toevoegt, niet pas na opslaan en terugklikken. */
+  function draftFoto(id) {
+    var d = state.draft;
+    if (!d || !d.photos) return null;
+    return d.photos.filter(function (p) { return p.id === id; })[0] || null;
+  }
+
+  async function knipOpen(imageId) {
+    var concept = draftFoto(imageId);
+    var rec = concept ? concept.blobs : await KastDB.get(KastDB.IMAGES, imageId);
+    var bron = rec && (rec.full || rec.thumb);
+    if (!bron) { toast('Deze foto is niet meer te lezen'); return; }
+
+    toonBezig('Foto klaarzetten…');
+    var bmp;
+    try {
+      bmp = await loadBitmap(bron);
+    } catch (e) {
+      verbergBezig();
+      toast('Kan deze foto niet openen');
+      return;
+    }
+    knipsel = {
+      id: imageId,
+      concept: !!concept,
+      sessie: Knipsel.sessie(bmp),
+      tolerantie: KNIP_START,
+      streken: [],
+      modus: 'weg',
+      maat: 7,
+      had: !!(rec && rec.cut)
+    };
+    if (bmp.close) bmp.close();
+    knipsel.sessie.basisVoor(knipsel.tolerantie);
+    verbergBezig();
+    knipToon();
+  }
+
+  function knipToon() {
+    showSheet('Achtergrond weghalen',
+      '<div class="knip-doek"><canvas id="knipCanvas"></canvas></div>' +
+      '<p class="knip-stand" id="knipStand"></p>' +
+
+      '<label class="knip-regel" for="knipTol">' +
+        '<span>Hoeveel mag weg</span>' +
+        '<input id="knipTol" class="schuif" type="range" min="10" max="100" step="1" ' +
+          'value="' + knipsel.tolerantie + '">' +
+      '</label>' +
+
+      '<div class="knip-regel">' +
+        '<span>Bijwerken met je vinger</span>' +
+        '<div class="segment small knip-modus">' +
+          '<button type="button" class="segment-btn' + (knipsel.modus === 'weg' ? ' active' : '') + '" ' +
+            'data-act="knip-modus" data-val="weg">Wissen</button>' +
+          '<button type="button" class="segment-btn' + (knipsel.modus === 'terug' ? ' active' : '') + '" ' +
+            'data-act="knip-modus" data-val="terug">Terughalen</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<label class="knip-regel" for="knipMaat">' +
+        '<span>Penseel</span>' +
+        '<input id="knipMaat" class="schuif" type="range" min="2" max="20" step="1" ' +
+          'value="' + knipsel.maat + '">' +
+      '</label>' +
+
+      '<button type="button" class="btn btn-ghost btn-block" data-act="knip-opnieuw">' +
+        '↺ Opnieuw beginnen</button>' +
+      '<p class="hint block">Het origineel blijft bewaard — je kunt altijd terug naar de hele foto.</p>',
+
+      '<button class="btn btn-primary btn-block" data-act="knip-bewaar">Gebruiken</button>' +
+      (knipsel.had
+        ? '<button class="btn btn-ghost btn-block" data-act="knip-af">Uitknippen ongedaan maken</button>'
+        : '') +
+      '<button class="btn btn-ghost btn-block" data-act="picker-close">Annuleren</button>');
+
+    knipHang();
+    knipTeken();
+  }
+
+  /* Het doek reageert op vingers en op de muis; pointer-events vangt allebei. */
+  function knipHang() {
+    var canvas = document.getElementById('knipCanvas');
+    if (!canvas) return;
+    var bezig = false;
+
+    function plaats(ev) {
+      var r = canvas.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) / r.width, y: (ev.clientY - r.top) / r.height };
+    }
+
+    function zet(ev) {
+      var p = plaats(ev);
+      if (p.x < 0 || p.y < 0 || p.x > 1 || p.y > 1) return;
+      var st = { x: p.x, y: p.y, r: knipsel.maat / 100, terug: knipsel.modus === 'terug' };
+      knipsel.streken.push(st);
+      knipsel.sessie.streek(st);
+      knipTeken();
+    }
+
+    canvas.addEventListener('pointerdown', function (ev) {
+      bezig = true;
+      canvas.setPointerCapture(ev.pointerId);
+      zet(ev);
+      ev.preventDefault();
+    });
+    canvas.addEventListener('pointermove', function (ev) {
+      if (!bezig) return;
+      zet(ev);
+      ev.preventDefault();
+    });
+    ['pointerup', 'pointercancel'].forEach(function (naam) {
+      canvas.addEventListener(naam, function () { bezig = false; });
+    });
+
+    var tol = document.getElementById('knipTol');
+    if (tol) {
+      tol.addEventListener('input', function () {
+        knipsel.tolerantie = Number(tol.value);
+        // Opnieuw wandelen duurt een tiende seconde; dat mag niet bij elke
+        // tik van het schuifje, anders loopt het achter je vinger aan.
+        clearTimeout(knipsel.wacht);
+        knipsel.wacht = setTimeout(function () {
+          knipsel.sessie.basisVoor(knipsel.tolerantie).herzet(knipsel.streken);
+          knipTeken();
+        }, 90);
+      });
+    }
+    var maat = document.getElementById('knipMaat');
+    if (maat) maat.addEventListener('input', function () { knipsel.maat = Number(maat.value); });
+  }
+
+  function knipTeken() {
+    var canvas = document.getElementById('knipCanvas');
+    if (!canvas || !knipsel) return;
+    var beeld = knipsel.sessie.beeld();
+    if (canvas.width !== beeld.width || canvas.height !== beeld.height) {
+      canvas.width = beeld.width;
+      canvas.height = beeld.height;
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(beeld, 0, 0);
+
+    var stand = document.getElementById('knipStand');
+    if (!stand) return;
+    var deel = knipsel.sessie.aandeel(beeld);
+    if (deel < 0.04) {
+      stand.className = 'knip-stand mis';
+      stand.textContent = 'Er blijft bijna niets over — de achtergrond lijkt te veel op het ' +
+        'kledingstuk. Schuif "hoeveel mag weg" naar links, of haal het met je vinger terug.';
+    } else if (deel > 0.96) {
+      stand.className = 'knip-stand mis';
+      stand.textContent = 'Er gaat bijna niets weg. Schuif "hoeveel mag weg" naar rechts, of ' +
+        'maak een foto op een egale ondergrond.';
+    } else {
+      stand.className = 'knip-stand';
+      stand.textContent = Math.round((1 - deel) * 100) + '% van de foto is weggehaald.';
+    }
+  }
+
+  async function knipBewaar() {
+    if (!knipsel) return;
+    toonBezig('Bewaren…');
+    try {
+      var beeld = Knipsel.bijsnijden(knipsel.sessie.beeld());
+      var blob = await Knipsel.naarBlob(beeld);
+      if (!blob) throw new Error('geen blob');
+      if (knipsel.concept) {
+        var foto = draftFoto(knipsel.id);
+        if (!foto) throw new Error('weg');
+        foto.blobs.cut = blob;
+        knipselIds[knipsel.id] = 1;
+        // Het formulier toont de foto uit deze URL, dus die moet mee.
+        if (foto.url) URL.revokeObjectURL(foto.url);
+        foto.url = URL.createObjectURL(blob);
+      } else {
+        var rec = await KastDB.get(KastDB.IMAGES, knipsel.id);
+        if (!rec) throw new Error('weg');
+        rec.cut = blob;
+        await KastDB.put(KastDB.IMAGES, rec);
+        await laadKnipsels();
+      }
+      forgetImage(knipsel.id);
+      knipsel = null;
+      verbergBezig();
+      closeOverlay();
+      render();
+      toast('Achtergrond weggehaald');
+    } catch (err) {
+      verbergBezig();
+      toast('Bewaren lukte niet');
+    }
+  }
+
+  async function knipAf(id) {
+    var concept = draftFoto(id);
+    if (concept) {
+      delete concept.blobs.cut;
+      delete knipselIds[id];
+      if (concept.url) URL.revokeObjectURL(concept.url);
+      concept.url = URL.createObjectURL(concept.blobs.thumb);
+    } else {
+      var rec = await KastDB.get(KastDB.IMAGES, id);
+      if (!rec) return;
+      delete rec.cut;
+      await KastDB.put(KastDB.IMAGES, rec);
+      await laadKnipsels();
+    }
+    forgetImage(id);
+    knipsel = null;
+    closeOverlay();
+    render();
+    toast('Weer de hele foto');
+  }
+
+  /* Welke foto hoort bij dit kledingstuk, en is daar een uitknipsel van? */
+  function heeftKnipsel(item) {
+    var id = item && item.coverImageId;
+    return !!(id && knipselIds[id]);
+  }
+
+  /* Welke beelden een uitknipsel hebben, zodat schermen dat kunnen weten
+     zonder voor elke tegel de database te bevragen. */
+  var knipselIds = {};
+
+  async function laadKnipsels() {
+    try {
+      var alle = await KastDB.getAll(KastDB.IMAGES);
+      var kaart = {};
+      alle.forEach(function (r) { if (r.cut) kaart[r.id] = 1; });
+      knipselIds = kaart;
+    } catch (e) { knipselIds = {}; }
+  }
+
+  /* ─────────────────────────── Afbeeldingen ────────────────────────────── */
 
   function loadBitmap(file) {
     if (typeof createImageBitmap === 'function') {
@@ -858,10 +1608,19 @@
     return (colorMap[key] || {}).label || key;
   }
 
+  /* 'cut' is het uitgeknipte kledingstuk zonder achtergrond. Is dat er niet,
+     dan val je terug op de gewone foto — zo hoeft geen enkel scherm te weten
+     of er wel of niet uitgeknipt is. */
+  function kiesBlob(rec, kind) {
+    if (!rec) return null;
+    if (kind === 'cut') return rec.cut || rec.full || rec.thumb;
+    if (kind === 'full') return rec.full || rec.thumb;
+    return rec.thumb || rec.full;
+  }
+
   function getImageBlob(id, kind) {
     return KastDB.get(KastDB.IMAGES, id).then(function (rec) {
-      if (!rec) return null;
-      return kind === 'full' ? (rec.full || rec.thumb) : (rec.thumb || rec.full);
+      return kiesBlob(rec, kind);
     });
   }
 
@@ -869,8 +1628,7 @@
     var key = id + ':' + kind;
     if (urlPromises.has(key)) return urlPromises.get(key);
     var p = KastDB.get(KastDB.IMAGES, id).then(function (rec) {
-      if (!rec) return '';
-      var blob = kind === 'full' ? (rec.full || rec.thumb) : (rec.thumb || rec.full);
+      var blob = kiesBlob(rec, kind);
       if (!blob) return '';
       var url = URL.createObjectURL(blob);
       liveUrls.set(key, url);
@@ -881,7 +1639,7 @@
   }
 
   function forgetImage(id) {
-    ['thumb', 'full'].forEach(function (kind) {
+    ['thumb', 'full', 'cut'].forEach(function (kind) {
       var key = id + ':' + kind;
       var url = liveUrls.get(key);
       if (url) URL.revokeObjectURL(url);
@@ -1053,6 +1811,7 @@
     if (!o.coverImageId) o.coverImageId = o.imageIds[0] || null;
     if (!o.wearDates) o.wearDates = o.lastWorn ? [o.lastWorn] : [];
     if (!o.plannedDates) o.plannedDates = [];
+    if (o.bord && !Array.isArray(o.bord.stukken)) o.bord = null;
     return o;
   }
 
@@ -1344,13 +2103,18 @@
 
   /* ──────────────────────────── Stukjes opmaak ───────────────────────────── */
 
-  function itemThumb(item, cls) {
+  /* soort 'cut' pakt het uitgeknipte stuk als dat er is. Dat doen we waar een
+     stuk los hoort te zweven — in de banen van de stylist en in de bolletjes
+     van je keuze — en niet in de kast, want daar kijk je naar je foto's. */
+  function itemThumb(item, cls, soort) {
     var cat = catMap[item.category] || catMap.overig;
     var tint = colorMap[(item.colors || [])[0]];
     var bg = tint && tint.hex.indexOf('gradient') === -1 ? tint.hex : '';
     var style = bg ? ' style="background:' + esc(bg) + '"' : '';
     var cover = coverImageOf(item);
-    var photo = cover ? '<img class="ph-img" data-img="' + esc(cover) + ':thumb" alt="">' : '';
+    var photo = cover
+      ? '<img class="ph-img" data-img="' + esc(cover) + ':' + (soort === 'cut' ? 'cut' : 'thumb') + '" alt="">'
+      : '';
     return '<div class="' + (cls || 'tile-photo') + (cover ? ' laadt' : '') + '">' +
              '<div class="ph-fallback"' + style + '><span>' + cat.icon + '</span></div>' +
              photo +
@@ -1410,7 +2174,7 @@
     if (parts[0] === 'kast' || parts[0] === 'item') return 'kast';
     if (parts[0] === 'outfits' || parts[0] === 'outfit') return 'outfits';
     if (parts[0] === 'mappen' || parts[0] === 'map' || parts[0] === 'agenda') return 'outfits';
-    if (parts[0] === 'stylist') return 'stylist';
+    if (parts[0] === 'stylist' || parts[0] === 'bord') return 'stylist';
     if (parts[0] === 'inspiratie' || parts[0] === 'look') return 'inspiratie';
     if (parts[0] === 'askim') return 'askim';
     if (parts[0] === 'meer' || parts[0] === 'doneren' || parts[0] === 'opruimen') return 'meer';
@@ -1431,7 +2195,7 @@
       var nieuw = String(parts[1]).indexOf('new') === 0;
       return (nieuw || parts[2] === 'edit') ? 2 : 1;
     }
-    if (p0 === 'doneren' || p0 === 'opruimen' || p0 === 'account') return 1;
+    if (p0 === 'doneren' || p0 === 'opruimen' || p0 === 'account' || p0 === 'bord') return 1;
     if (p0 === 'look') return 1;
     return 0;
   }
@@ -1490,6 +2254,12 @@
       case 'agenda':
         top = topBar('Agenda');
         view = viewAgenda();
+        break;
+      case 'bord':
+        if (!state.bord) state.bord = leegBord();
+        top = topBar('Outfitbord', '#/stylist',
+          '<button class="icon-btn" data-act="bord-leeg" title="Bord leegmaken">↺</button>');
+        view = viewBord();
         break;
       case 'stylist':
         top = topBar('Stylist', null,
@@ -1570,6 +2340,7 @@
     // Elke baan begint op het stuk dat al gekozen was, anders sta je na een
     // tekenbeurt weer helemaal links terwijl je keuze verderop staat.
     if (parts[0] === 'stylist') centreerBanen();
+    if (parts[0] === 'bord') bordHang();
     // De community-feed halen we op zodra je hem opent, niet eerder — en
     // alleen bij het openen. Zou dit bij élke tekenbeurt gebeuren, dan zou een
     // mislukte poging zichzelf eindeloos herhalen: laadFeed tekent namelijk
@@ -1938,6 +2709,14 @@
               'target="_blank" rel="noopener noreferrer">🛍️ Bekijk bij ' + esc(winkelNaam(it.link)) + '</a>'
           : '') +
 
+        (cover
+          ? '<button class="btn btn-secondary btn-block" data-act="knip-open" data-id="' + esc(cover) + '">' +
+              (knipselIds[cover] ? '✂️ Uitknippen bijwerken' : '✂️ Achtergrond weghalen') + '</button>' +
+            '<p class="hint block">' + (knipselIds[cover]
+              ? 'Zonder achtergrond staat dit stuk los in de stylist en op het outfitbord.'
+              : 'Haal je de achtergrond weg, dan kun je dit stuk los neerleggen op het outfitbord.') + '</p>'
+          : '') +
+
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(it, 'rate-item') +
         briefje(it, 'note-item') +
@@ -2076,10 +2855,12 @@
       var img = p.url
         ? '<img class="ph-img loaded" src="' + esc(p.url) + '" alt="">'
         : '<img class="ph-img" data-img="' + esc(p.id) + ':thumb" alt="">';
-      return '<div class="photo-thumb' + (p.id === (coverPhoto && coverPhoto.id) ? ' is-cover' : '') + '" ' +
+      return '<div class="photo-thumb' + (p.id === (coverPhoto && coverPhoto.id) ? ' is-cover' : '') +
+        (knipselIds[p.id] ? ' is-knip' : '') + '" ' +
         'data-act="set-cover" data-id="' + esc(p.id) + '">' +
         img +
         '<span class="cover-mark">★</span>' +
+        '<span class="knip-mark" aria-hidden="true">✂️</span>' +
         '<button type="button" class="thumb-x" data-act="drop-photo" data-id="' + esc(p.id) + '" aria-label="Foto verwijderen">×</button>' +
       '</div>';
     }).join('');
@@ -2096,6 +2877,13 @@
         ? '<div class="photo-strip scroll-x">' + strip +
             '<button type="button" class="photo-add" data-act="pick-photo" aria-label="Foto toevoegen">+</button>' +
           '</div>' +
+          (coverPhoto
+            ? '<button type="button" class="btn btn-secondary btn-block" ' +
+                'data-act="knip-open" data-id="' + esc(coverPhoto.id) + '">' +
+                (knipselIds[coverPhoto.id]
+                  ? '✂️ Uitknippen bijwerken'
+                  : '✂️ Achtergrond weghalen') + '</button>'
+            : '') +
           '<p class="hint block">' + (d.photos.length > 1
             ? 'Tik op een foto om die als hoofdfoto te kiezen — die zie je in de kast en op outfits.'
             : 'Voeg gerust meer foto\'s toe; de foto met ★ is de hoofdfoto.') + '</p>'
@@ -2206,7 +2994,9 @@
     for (var p = 0; p < d.photos.length; p++) {
       var ph = d.photos[p];
       if (!ph.blobs) continue;
-      await KastDB.put(KastDB.IMAGES, { id: ph.id, full: ph.blobs.full, thumb: ph.blobs.thumb });
+      await KastDB.put(KastDB.IMAGES, {
+        id: ph.id, full: ph.blobs.full, thumb: ph.blobs.thumb, cut: ph.blobs.cut
+      });
       forgetImage(ph.id);
     }
 
@@ -2385,6 +3175,9 @@
           ? '<button class="btn btn-secondary btn-block" data-act="unwear-outfit" data-id="' + esc(o.id) + '">\u2713 Vandaag gedragen \u2014 toch niet?</button>'
           : '<button class="btn btn-primary btn-block" data-act="wear-outfit" data-id="' + esc(o.id) + '">Vandaag gedragen</button>') +
 
+        '<button class="btn btn-secondary btn-block" data-act="bord-open" data-id="' + esc(o.id) + '">' +
+          (o.bord ? '🎨 Bord openen' : '🎨 Op het outfitbord leggen') + '</button>' +
+
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(o, 'rate-outfit') +
         briefje(o, 'note-outfit') +
@@ -2490,7 +3283,7 @@
       '<div class="field"><label>Kledingstukken <span class="hint">(' + chosen.length + ' gekozen)</span></label>' +
         (chosen.length
           ? '<div class="sel-strip scroll-x">' + chosen.map(function (it) {
-              return '<div class="sel-chip">' + itemThumb(it, 'sel-thumb') +
+              return '<div class="sel-chip">' + itemThumb(it, 'sel-thumb', 'cut') +
                 '<span class="sel-name">' + esc(it.name || 'Naamloos') + '</span>' +
                 '<button type="button" class="sel-x" data-act="unpick-item" data-id="' + esc(it.id) + '" aria-label="Verwijderen">×</button>' +
               '</div>';
@@ -2701,7 +3494,7 @@
     return '<button type="button" class="rail-card' + (aan ? ' selected' : '') + '" ' +
         'data-act="lane-pick" data-lane="' + lane.key + '" data-id="' + esc(it.id) + '" ' +
         'aria-pressed="' + (aan ? 'true' : 'false') + '">' +
-      '<span class="rail-media">' + itemThumb(it, 'rail-photo') +
+      '<span class="rail-media">' + itemThumb(it, 'rail-photo', 'cut') +
         (it.favorite ? '<span class="tile-fav">★</span>' : '') +
         (it.rating ? '<span class="tile-rating">' + it.rating + '</span>' : '') +
         '<i class="rail-check" aria-hidden="true">✓</i>' +
@@ -2719,6 +3512,8 @@
           plural(ids.length, 'stuk', 'stukken') + '</b>' +
         '<div id="buildNames" class="build-namen">' + bollenRij(ids) + '</div>' +
       '</div>' +
+      '<button type="button" class="btn btn-secondary" data-act="style-naar-bord" ' +
+        'title="Op het outfitbord leggen">🎨</button>' +
       '<button type="button" class="btn btn-primary" data-act="style-save">Bewaren</button>' +
     '</div>';
   }
@@ -2731,7 +3526,7 @@
       var it = getItem(id);
       if (!it) return '';
       return '<span class="build-bol" style="animation-delay:' + (i * 60) + 'ms" ' +
-        'title="' + esc(it.name || 'Naamloos') + '">' + itemThumb(it, 'bol-foto') + '</span>';
+        'title="' + esc(it.name || 'Naamloos') + '">' + itemThumb(it, 'bol-foto', 'cut') + '</span>';
     }).join('');
   }
 
@@ -5005,6 +5800,75 @@
     'bulk-add': function () { els.fileBulk.click(); },
     'pick-photo': function () { els.filePhoto.click(); },
 
+    /* ── Het outfitbord ── */
+    'bord-leg': function (btn) { bordLeg(btn.getAttribute('data-id')); },
+    'bord-weg': function () {
+      var b = state.bord;
+      if (b.gekozen == null) return;
+      b.stukken.splice(b.gekozen, 1);
+      b.gekozen = null;
+      render();
+    },
+    'bord-voor': function () { bordLaag(1); },
+    'bord-achter': function () { bordLaag(-1); },
+    'bord-spiegel': function () {
+      var st = bordGekozen();
+      if (!st) return;
+      st.flip = !st.flip;
+      render();
+    },
+    'bord-rechtop': function () {
+      var st = bordGekozen();
+      if (!st) return;
+      st.r = 0;
+      render();
+    },
+    'bord-achtergrond': function (btn) {
+      state.bord.achtergrond = btn.getAttribute('data-val');
+      render();
+    },
+    'bord-bewaar': function () { bordBewaar(); },
+    'bord-leeg': async function () {
+      if (!state.bord || !state.bord.stukken.length) return;
+      var ok = await confirmDialog({
+        title: 'Bord leegmaken?',
+        body: 'Alles wat je hebt neergelegd verdwijnt. Een outfit die je al bewaard hebt blijft staan.',
+        confirmLabel: 'Leegmaken', danger: true
+      });
+      if (!ok) return;
+      state.bord = leegBord();
+      render();
+    },
+    'bord-open': function (btn) { bordOpen(btn.getAttribute('data-id')); },
+    /* Vanuit de stylist: wat je in de banen gekozen hebt gaat mee naar het
+       bord, zodat je het daar kunt schikken in plaats van alleen opsommen. */
+    'style-naar-bord': function () {
+      state.bord = leegBord();
+      stylistIds().forEach(function (id) { bordLegStil(id); });
+      go('#/bord');
+    },
+
+    /* ── Achtergrond weghalen ── */
+    'knip-open': function (btn) { knipOpen(btn.getAttribute('data-id')); },
+    'knip-modus': function (btn) {
+      if (!knipsel) return;
+      knipsel.modus = btn.getAttribute('data-val');
+      Array.prototype.forEach.call(document.querySelectorAll('.knip-modus .segment-btn'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-val') === knipsel.modus);
+      });
+    },
+    'knip-opnieuw': function () {
+      if (!knipsel) return;
+      knipsel.streken = [];
+      knipsel.tolerantie = KNIP_START;
+      var tol = document.getElementById('knipTol');
+      if (tol) tol.value = KNIP_START;
+      knipsel.sessie.basisVoor(KNIP_START).herzet([]);
+      knipTeken();
+    },
+    'knip-bewaar': function () { knipBewaar(); },
+    'knip-af': function () { if (knipsel) knipAf(knipsel.id); },
+
     'toggle-filters': function () { state.filtersOpen = !state.filtersOpen; render(); },
     'wear-mode': function () { state.wearMode = !state.wearMode; render(); },
     /* Aanvinkmodus: één tik noteert de dag van vandaag, nog een tik draait
@@ -6059,6 +6923,7 @@
       return f;
     });
     state.looks = (res[3] || []).map(normalizeLook);
+    await laadKnipsels();
   }
 
   async function init() {

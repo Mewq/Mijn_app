@@ -437,6 +437,13 @@ input, textarea, select { font: inherit; }
 
 .ph-img.loaded, .ph-img[src] { opacity: 1; }
 
+/* Een uitgeknipt stuk wil je helemaal zien: bij 'cover' snijdt de mouw of de
+   pijp eraf, en juist bij een los zwevend stuk valt dat meteen op. */
+.ph-img[data-img$=":cut"] {
+  object-fit: contain;
+  padding: 4px;
+}
+
 .tile-body { display: flex; flex-direction: column; padding: 6px 2px 0; }
 
 .tile-name {
@@ -1396,6 +1403,101 @@ input, textarea, select { font: inherit; }
 }
 
 .photo-thumb.is-cover .cover-mark { opacity: 1; }
+
+.knip-mark {
+  position: absolute;
+  bottom: 4px;
+  right: 5px;
+  font-size: 12px;
+  opacity: 0;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .7));
+}
+
+.photo-thumb.is-knip .knip-mark { opacity: 1; }
+
+/* ───────────────────── Achtergrond weghalen ──────────────────────────────
+   Het ruitjespatroon achter het kledingstuk is de afspraak voor "hier is
+   niets": zonder die ruitjes zie je niet of de achtergrond doorzichtig is of
+   gewoon wit. */
+.knip-doek {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  /* Op een telefoon moeten het schuifje en het penseel eronder passen; zonder
+     deze grens duwt het doek ze voorbij de onderkant van het scherm. */
+  max-height: 42vh;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background-color: var(--surface-2);
+  background-image:
+    linear-gradient(45deg, var(--line) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--line) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--line) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--line) 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+  touch-action: none;          /* anders scrolt de telefoon mee met het penseel */
+}
+
+.knip-doek canvas {
+  max-width: 100%;
+  max-height: 100%;
+  cursor: crosshair;
+}
+
+.knip-stand {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  min-height: 2.4em;
+}
+
+.knip-stand.mis { color: var(--danger); }
+
+.knip-regel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.knip-regel > span { flex: none; width: 9.5em; color: var(--ink-soft); }
+.knip-regel .segment.small { flex: 1; margin: 0; }
+.knip-regel .schuif { flex: 1; }
+
+.schuif {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 100px;
+  background: var(--line-sterk, var(--line));
+  outline: none;
+}
+
+.schuif::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.schuif::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
 
 .thumb-x {
   position: absolute;
@@ -3673,4 +3775,198 @@ input, textarea, select { font: inherit; }
 
 @media (min-width: 720px) {
   .feed-balk { margin: 0 24px 8px; }
+}
+
+/* ─────────────────────────── Het outfitbord ──────────────────────────────
+   Een vlak waar kledingstukken los op liggen. Alles wat je neerlegt is een
+   gewoon plaatje met een transform erop — geen tekening op een canvas — zodat
+   je er rechtstreeks met je vinger op kunt mikken. */
+
+.bord-scherm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bord-wrap { padding: 0 14px; }
+
+.bord {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  max-height: 52vh;
+  margin: 0 auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  /* Zonder dit scrollt de pagina mee zodra je een stuk versleept. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bord[data-achtergrond="papier"] { background: var(--surface-2); }
+.bord[data-achtergrond="wit"] { background: #fff; }
+.bord[data-achtergrond="zacht"] { background: var(--accent-soft); }
+.bord[data-achtergrond="donker"] { background: #20201e; }
+
+.bord-stuk {
+  position: absolute;
+  display: block;
+  max-width: none;
+  cursor: grab;
+  /* Een uitgeknipt stuk heeft geen eigen schaduw meer; deze geeft hem weer
+     wat lucht onder zich, zodat het bord geen platte plaksel-collage wordt. */
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .18));
+  transform-origin: 50% 50%;
+}
+
+.bord-stuk.gekozen {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+.bord-leeg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 0 32px;
+  text-align: center;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.bord-leeg span { font-size: 38px; }
+.bord-leeg p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+
+/* Het hoekje om mee te draaien en te schalen. */
+.bord-greep {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  cursor: nwse-resize;
+  box-shadow: var(--shadow);
+  touch-action: none;
+  z-index: 50;
+}
+
+.bord-balk {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.bord-knop {
+  flex: 1;
+  max-width: 76px;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 5px 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform var(--tijd-kort) var(--veer);
+}
+
+.bk-teken { font-size: 16px; line-height: 1; }
+.bk-label { font-size: 10px; letter-spacing: .02em; color: var(--ink-soft); }
+.bord-knop.weg .bk-label { color: var(--danger); }
+
+.bord-knop:active { transform: scale(.94); }
+.bord-knop.weg { color: var(--danger); }
+
+.bord-tip {
+  margin: 0;
+  padding: 0 20px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.bord-kleuren { margin: 0; }
+
+/* De lade: je kast per categorie, om stukken uit te kiezen. */
+.bord-lade {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.bord-lade.leeg { padding: 14px; border: 0; }
+
+.lade-groep { padding: 6px 0 2px; }
+
+.lade-kop {
+  display: block;
+  padding: 0 14px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.lade-tegel {
+  position: relative;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: transform var(--tijd-kort) var(--veer);
+}
+
+.lade-tegel:active { transform: scale(.93); }
+
+.lade-tegel .ph-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+
+/* Een stuk met uitknipsel ligt los; dat mag je zien voor je het oppakt. */
+.lade-tegel.knip { background: var(--surface-2); }
+.lade-tegel.knip::after {
+  content: "✂";
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 9px;
+  color: var(--accent);
+}
+
+.bord-acties { padding: 4px 14px 10px; }
+
+@media (min-width: 720px) {
+  .bord-wrap { padding: 0 24px; }
+  .bord { max-width: 520px; }
+  .bord-balk, .bord-acties { padding-left: 24px; padding-right: 24px; }
+  .lade-kop { padding-left: 24px; }
 }

@@ -1,7 +1,7 @@
 /* Kleine service worker: de app blijft werken zonder verbinding.
    Bump CACHE bij elke wijziging aan de bestanden hieronder, anders blijven
    bezoekers de oude versie uit de cache zien. */
-var CACHE = 'kledingkast-online-v5';
+var CACHE = 'kledingkast-online-v9';
 var ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ var ASSETS = [
   './app.js',
   './api.js',
   './db.js',
+  './knipsel.js',
   './icon.svg',
   './manifest.webmanifest'
 ];

@@ -521,6 +521,57 @@ Een baan kan niet voorbij zijn eigen einde schuiven. Het laatste stuk van een
 korte baan komt dus niet precies in het midden, alleen helemaal in beeld. Dat
 is normaal gedrag van een scroller, geen bug om omheen te bouwen.
 
-Pas je `app.js`, `style.css`, `db.js` of `index.html` aan, verhoog dan het
-versienummer `CACHE` bovenin `sw.js`. Anders blijven bezoekers de oude versie
-uit de cache zien.
+## Achtergrond weghalen
+
+`knipsel.js` haalt de achtergrond van een kledingfoto weg. Er zit geen model in
+en er wordt niets opgehaald; het is een toverstaf die vanaf de rand van de foto
+naar binnen loopt zolang de kleur op de achtergrond blijft lijken, en stopt waar
+het kledingstuk begint.
+
+Twee dingen maken het verschil tussen "aardig" en "bruikbaar". Vergelijken
+gebeurt in Lab met de lichtheid half meegeteld, want een schaduw is dezelfde
+kleur maar donkerder — in RGB zou die blijven staan. En naast de vergelijking
+met de randkleur is er een veel strengere vergelijking met de buurpixel, zodat
+een geleidelijk verlopende achtergrond oplost zonder dat de wandeling over een
+scherpe rand heen springt. Die buurvergelijking mag alleen binnen een schil rond
+de achtergrondkleur; zonder die grens wandelt hij via kleine stapjes zo een
+donkere trui binnen.
+
+De factoren in `vanafDeRand()` zijn met de hand gemeten op nagemaakte foto's —
+een donker, een beige, een rood en een wit kledingstuk op een vloer met schaduw.
+De stand in het midden van het schuifje werkt voor bijna alles; wit op een lichte
+vloer vraagt om een lagere stand. Verander je een factor, meet dan opnieuw hoe
+de hele schaal loopt: het is makkelijk om één geval beter te maken en drie andere
+stuk.
+
+Het uitknipsel komt naast de foto in de database te staan (`cut` naast `full` en
+`thumb`), als WebP met doorzichtigheid. Het origineel blijft dus altijd bewaard.
+Schermen vragen om `:cut` waar een stuk los hoort te zweven — de banen van de
+stylist en het outfitbord — en om `:thumb` in de kast, want daar kijk je naar je
+foto's. Is er geen uitknipsel, dan geeft `kiesBlob()` gewoon de foto terug, zodat
+geen enkel scherm hoeft te weten of er uitgeknipt is.
+
+## Het outfitbord
+
+`#/bord` is een vlak waar je kledingstukken op legt, verschuift, draait en over
+elkaar schikt. De stukken zijn gewone `<img>`-elementen met een transform, geen
+tekeningen op een canvas: de browser doet het schalen, een uitgeknipt stuk blijft
+scherp, en je mikt met je vinger rechtstreeks op het stuk zelf. Pas bij het
+bewaren gaat alles één keer door een canvas om er een plaatje van te maken, dat
+de omslag van de outfit wordt. De indeling gaat mee in het outfit-record, zodat
+je het bord later weer open kunt slaan.
+
+Waar een stuk landt hangt af van de categorie (`BORD_PLEK`): een trui bovenaan,
+schoenen onderaan. Hoe groot het binnenkomt hangt af van de verhouding van de
+foto, en die kennen we pas als hij geladen is — vandaar `breedte: null` en
+`pasMaat()`. Tot die tijd staat het stuk op `visibility:hidden`, anders zie je
+hem eerst op de verkeerde maat verschijnen.
+
+Tijdens het slepen wordt alleen het `style`-attribuut van dat ene element
+bijgewerkt. Opnieuw tekenen zou de handlers weggooien waar je vinger middenin
+een beweging op staat; dat is precies wat er gebeurt als je `render()` in een
+pointerhandler zet.
+
+Pas je `app.js`, `knipsel.js`, `style.css`, `db.js` of `index.html` aan, verhoog
+dan het versienummer `CACHE` bovenin `sw.js`. Anders blijven bezoekers de oude
+versie uit de cache zien.
