@@ -17,6 +17,7 @@ const path = require('node:path');
 const { db, UPLOAD_DIR } = require('./db');
 
 const PORT = Number(process.env.PORT || 8787);
+const UITNODIGING = (process.env.KAST_UITNODIGING || '').trim();
 
 /* ── Grenzen ──
    Alles wat van buiten komt heeft een bovengrens. Zonder deze getallen is één
@@ -200,6 +201,13 @@ const routes = {
     const handle = kort(b.handle, 30).trim().toLowerCase();
     const wachtwoord = String(b.wachtwoord || '');
 
+    /* Staat de server op je eigen machine en kan de hele wereld er bij, dan
+       wil je niet dat de hele wereld ook een account kan maken. Met
+       KAST_UITNODIGING erbij komt er alleen iemand in die de code kent; laat
+       je hem leeg, dan mag iedereen zich aanmelden. */
+    if (UITNODIGING && String(b.uitnodiging || '').trim() !== UITNODIGING) {
+      return fout(res, 403, 'Deze kledingkast is op uitnodiging. Vul de code in die je gekregen hebt.');
+    }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fout(res, 400, 'Vul een geldig e-mailadres in.');
     if (!/^[a-z0-9_.]{3,30}$/.test(handle)) return fout(res, 400, 'Kies een naam van 3-30 tekens: letters, cijfers, _ en .');
     if (wachtwoord.length < 8) return fout(res, 400, 'Kies een wachtwoord van minstens 8 tekens.');
@@ -615,7 +623,9 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('x-content-type-options', 'nosniff');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
-  if (url.pathname === '/api/status') return json(res, 200, { ok: true, tijd: nu() });
+  if (url.pathname === '/api/status') {
+    return json(res, 200, { ok: true, tijd: nu(), uitnodiging: !!UITNODIGING });
+  }
   if (url.pathname.startsWith('/uploads/')) return serveerFoto(res, url.pathname.slice(9));
 
   const route = zoekRoute(req.method, url.pathname);
@@ -640,7 +650,9 @@ if (require.main === module) {
     console.log('  op deze computer   http://localhost:' + PORT);
     const lan = lanAdres();
     if (lan) console.log('  op je telefoon     http://' + lan + ':' + PORT + '   (zelfde wifi)');
-    if (!WEB_DIR) console.log('\n  Alleen de API — KAST_WEB staat leeg.');
+    if (UITNODIGING) console.log('\n  Aanmelden kan alleen met de uitnodigingscode.');
+    else console.log('\n  Let op: iedereen die hierbij kan, kan een account maken.');
+    if (!WEB_DIR) console.log('  Alleen de API — KAST_WEB staat leeg.');
     else if (!fs.existsSync(path.join(WEB_DIR, 'index.html'))) {
       console.log('\n  Let op: geen index.html in ' + WEB_DIR + ' — alleen de API doet het dan.');
     }

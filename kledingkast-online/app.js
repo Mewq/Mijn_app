@@ -121,6 +121,8 @@
     blokkades: null,        // null = nog niet opgehaald, [] = opgehaald en leeg
     bord: null,             // het outfitbord; pas gevuld als je het opent
     inspo: [],              // inspiratiefoto's in mappen; geen outfits
+    serverVraagtCode: null, // vraagt de server een uitnodigingscode? null = nog niet gevraagd
+    authVelden: { email: '', handle: '', ww: '', code: '' },
     inspoOpen: null,        // welke inspiratiefoto er openstaat
     inspoVoorMap: null,     // in welke map een nieuwe foto moet landen
     lookFilter: { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false },
@@ -2433,6 +2435,9 @@
     if (nieuweRoute && parts[0] === 'account' && KastAPI.ingelogd() && state.blokkades === null) {
       laadBlokkades();
     }
+    if (nieuweRoute && parts[0] === 'account' && !KastAPI.ingelogd() && state.serverVraagtCode === null) {
+      vraagServerStand();
+    }
     speelVlucht();
   }
 
@@ -4322,6 +4327,10 @@
 
   function viewAccount() {
     var ik = KastAPI.gebruiker();
+    /* Wat je al had ingetikt blijft staan. Een tekenbeurt — en die komt er bij
+       elke foutmelding — zou het formulier anders leegvegen, en dan mag je je
+       e-mailadres en wachtwoord opnieuw intypen omdat je één code verkeerd had. */
+    var av = state.authVelden;
     if (!ik) {
       return '<div class="page">' +
         '<div class="over-kaart">' +
@@ -4338,17 +4347,26 @@
         '</div>' +
 
         '<form class="form" id="authForm" novalidate>' +
+          (state.authMode === 'nieuw' && state.serverVraagtCode
+            ? '<div class="field"><label for="a-code">Uitnodigingscode</label>' +
+                '<input id="a-code" class="input" type="text" value="' + esc(av.code) + '" ' +
+                  'autocomplete="off" autocapitalize="off" spellcheck="false">' +
+                '<p class="hint block">Deze kledingkast staat op uitnodiging. ' +
+                'Vraag de code aan degene die de server beheert.</p></div>'
+            : '') +
           (state.authMode === 'nieuw'
             ? '<div class="field"><label for="a-handle">Je naam in de app</label>' +
                 '<input id="a-handle" class="input" type="text" placeholder="sinan" ' +
+                  'value="' + esc(av.handle) + '" ' +
                   'autocomplete="username" autocapitalize="off" spellcheck="false">' +
                 '<p class="hint block">Letters, cijfers, _ en . — dit zien anderen bij je looks.</p></div>'
             : '') +
           '<div class="field"><label for="a-email">E-mailadres</label>' +
             '<input id="a-email" class="input" type="email" inputmode="email" ' +
+              'value="' + esc(av.email) + '" ' +
               'autocomplete="email" autocapitalize="off" spellcheck="false"></div>' +
           '<div class="field"><label for="a-ww">Wachtwoord</label>' +
-            '<input id="a-ww" class="input" type="password" ' +
+            '<input id="a-ww" class="input" type="password" value="' + esc(av.ww) + '" ' +
               'autocomplete="' + (state.authMode === 'nieuw' ? 'new-password' : 'current-password') + '"></div>' +
           (state.authFout ? '<p class="auth-fout">' + esc(state.authFout) + '</p>' : '') +
           '<button type="button" class="btn btn-primary btn-block" data-act="auth-doe">' +
@@ -4404,6 +4422,19 @@
       '<p class="footer-note">Verwijderen wist je account, je gepubliceerde looks en je ' +
         'back-up van de server. Je kast op dit apparaat blijft staan.</p>' +
     '</div>';
+  }
+
+  /* Vraagt de server een uitnodigingscode? Dat bepaalt of er een veld bij komt
+     te staan. Lukt het vragen niet, dan laten we het veld weg: een onnodig
+     veld is vervelender dan een foutmelding achteraf. */
+  async function vraagServerStand() {
+    try {
+      var uit = await KastAPI.status();
+      state.serverVraagtCode = !!(uit && uit.uitnodiging);
+    } catch (e) {
+      state.serverVraagtCode = false;
+    }
+    if (state.serverVraagtCode) render();
   }
 
   /* Wie je verborgen hebt. Lukt het ophalen niet, dan blijft de lijst gewoon
@@ -6695,6 +6726,12 @@
     },
 
     'auth-mode': function (btn) {
+      // Eerst bewaren wat er staat: wisselen van tabblad tekent opnieuw.
+      ['email:a-email', 'ww:a-ww', 'handle:a-handle', 'code:a-code'].forEach(function (paar) {
+        var deel = paar.split(':');
+        var el = document.getElementById(deel[1]);
+        if (el) state.authVelden[deel[0]] = el.value;
+      });
       state.authMode = btn.getAttribute('data-val');
       state.authFout = '';
       render();
@@ -6703,6 +6740,12 @@
       var email = (document.getElementById('a-email') || {}).value || '';
       var ww = (document.getElementById('a-ww') || {}).value || '';
       var handleVeld = document.getElementById('a-handle');
+      var codeVeldNu = document.getElementById('a-code');
+      state.authVelden = {
+        email: email, ww: ww,
+        handle: handleVeld ? handleVeld.value : '',
+        code: codeVeldNu ? codeVeldNu.value : ''
+      };
       state.authFout = '';
       toonBezig(state.authMode === 'nieuw' ? 'Account maken…' : 'Inloggen…');
       try {
@@ -6710,13 +6753,15 @@
           await KastAPI.registreer({
             email: email.trim(), wachtwoord: ww,
             handle: (handleVeld ? handleVeld.value : '').trim().toLowerCase(),
-            naam: (handleVeld ? handleVeld.value : '').trim()
+            naam: (handleVeld ? handleVeld.value : '').trim(),
+            uitnodiging: state.authVelden.code.trim()
           });
         } else {
           await KastAPI.login(email.trim(), ww);
         }
         state.account = await KastAPI.me();
         state.blokkades = null;
+        state.authVelden = { email: '', handle: '', ww: '', code: '' };
         state.online.geladen = false;
         verbergBezig();
         go('#/inspiratie');

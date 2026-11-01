@@ -1,0 +1,42 @@
+# Kledingkast als dienst op een eigen machine.
+#
+# Zet dit bestand neer als /etc/systemd/system/kledingkast.service, pas de
+# paden en de gebruiker aan, en dan:
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now kledingkast
+#   systemctl status kledingkast
+#   journalctl -u kledingkast -f        # meekijken
+#
+# Na een wijziging in de code: sudo systemctl restart kledingkast
+
+[Unit]
+Description=Kledingkast
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kledingkast
+Group=kledingkast
+WorkingDirectory=/opt/kledingkast
+ExecStart=/usr/bin/node /opt/kledingkast/server/server.js
+Restart=always
+RestartSec=5
+
+Environment=PORT=8787
+# Waar de database en de foto's staan. Dit is het enige wat je moet back-uppen.
+Environment=KAST_DATA=/var/lib/kledingkast
+# Zonder code kan iedereen die bij de server kan een account maken. Met een
+# code alleen wie hem kent. Verzin iets eigens en deel het met wie mee mag doen.
+Environment=KAST_UITNODIGING=verander-dit
+
+# De server hoeft nergens anders bij te kunnen dan bij zijn eigen data.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/kledingkast
+
+[Install]
+WantedBy=multi-user.target
