@@ -572,6 +572,32 @@ bijgewerkt. Opnieuw tekenen zou de handlers weggooien waar je vinger middenin
 een beweging op staat; dat is precies wat er gebeurt als je `render()` in een
 pointerhandler zet.
 
+## Inspiratie in een map
+
+Een map verzamelt outfits, maar ook plaatjes die je ergens vandaan hebt: een
+screenshot, iets uit een webshop, een foto van een etalage. Die staan in een
+eigen store (`inspo`) en zijn met opzet géén outfits.
+
+Dat laatste is de hele reden dat ze bestaan. Een plaatje van internet is niet
+jouw kleding: je draagt het niet, het heeft geen kledingstukken, en het hoort
+niet mee te tellen in je outfitoverzicht, je cijfers of je paklijst. Als
+vlaggetje op een outfit zou het overal weer opduiken waar outfits langskomen;
+als eigen soort hoef je er nergens anders rekening mee te houden.
+
+Een map verwijst ernaar met `inspoIds`, naast `outfitIds`. Verwijder je een
+map, dan blijven de outfits bestaan maar gaan de inspiratiefoto's mee weg —
+die hebben geen andere plek en zouden anders als onzichtbare plaatjes in de
+database achterblijven.
+
+Let op bij het bewerkformulier van een map: dat werkt met een kopie. Voeg je
+ondertussen een inspiratiefoto toe, dan staat die niet in die kopie, en zou
+opslaan hem weggooien. `commitFolder()` haalt `inspoIds` en `packed` daarom van
+de map zoals hij op dat moment is, niet uit het formulier.
+
+Een outfit zonder kledingstukken is meestal zo'n plaatje dat als outfit is
+binnengekomen. Op zo'n outfit staat een knop om hem alsnog naar de inspiratie
+van een map te verplaatsen.
+
 Pas je `app.js`, `knipsel.js`, `style.css`, `db.js` of `index.html` aan, verhoog
 dan het versienummer `CACHE` bovenin `sw.js`. Anders blijven bezoekers de oude
 versie uit de cache zien.

@@ -3970,3 +3970,67 @@ input, textarea, select { font: inherit; }
   .bord-balk, .bord-acties { padding-left: 24px; padding-right: 24px; }
   .lade-kop { padding-left: 24px; }
 }
+
+/* ─────────────────────── Inspiratie in een map ───────────────────────────
+   Plaatjes van buiten: screenshots, iets uit een webshop. Ze staan in een
+   eigen raster zodat je meteen ziet dat het geen kleding van jezelf is. */
+
+.inspo-raster {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.inspo-tegel {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform var(--tijd-kort) var(--veer);
+}
+
+.inspo-tegel:active { transform: scale(.96); }
+
+.inspo-tegel .ph-img { object-fit: cover; }
+
+.inspo-tegel.toevoegen {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 22px;
+}
+
+.inspo-leeg { font-size: 22px; opacity: .5; }
+
+/* Een hoekje voor wie er een link bij heeft gezet. */
+.inspo-link {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 11px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6));
+}
+
+.inspo-groot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 42vh;
+  margin-bottom: 14px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.inspo-groot .ph-img { object-fit: contain; }
+
+@media (min-width: 540px) {
+  .inspo-raster { grid-template-columns: repeat(4, 1fr); }
+}

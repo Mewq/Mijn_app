@@ -120,6 +120,9 @@
     account: null,          // wie er ingelogd is, zodra de server dat bevestigt
     blokkades: null,        // null = nog niet opgehaald, [] = opgehaald en leeg
     bord: null,             // het outfitbord; pas gevuld als je het opent
+    inspo: [],              // inspiratiefoto's in mappen; geen outfits
+    inspoOpen: null,        // welke inspiratiefoto er openstaat
+    inspoVoorMap: null,     // in welke map een nieuwe foto moet landen
     lookFilter: { occasion: '', season: '', color: '', bron: '', alleenBewaard: false, alleenLeuk: false },
     duel: null,             // de twee outfits die nu tegenover elkaar staan
     wearMode: false         // tikken in de kast = vandaag gedragen
@@ -1762,7 +1765,7 @@
 
   function newFolder() {
     return {
-      id: uid('fld'), name: '', icon: '📁', outfitIds: [], notes: '',
+      id: uid('fld'), name: '', icon: '📁', outfitIds: [], inspoIds: [], notes: '',
       createdAt: Date.now(), updatedAt: Date.now()
     };
   }
@@ -1797,6 +1800,66 @@
     if (!i.wearDates) i.wearDates = i.lastWorn ? [i.lastWorn] : [];
     delete i.imageId;
     return i;
+  }
+
+  /* ── Inspiratiefoto's ──
+     Een plaatje dat je ergens vandaan hebt: een screenshot, iets van een
+     webshop, een foto van een etalage. Het staat in een map tussen je outfits,
+     maar het ís geen outfit — het is niet jouw kleding, je draagt het niet en
+     het hoort dus niet in je outfitoverzicht of in je cijfers mee te tellen.
+     Daarom een eigen soort in plaats van een vlaggetje op een outfit. */
+  function newInspo() {
+    return {
+      id: uid('insp'),
+      imageId: null,
+      naam: '',
+      notitie: '',
+      bron: '',               // waar het vandaan komt, als je dat erbij zet
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+  }
+
+  function normalizeInspo(i) {
+    i.naam = i.naam || '';
+    i.notitie = i.notitie || '';
+    i.bron = netteLink(i.bron);
+    return i;
+  }
+
+  function getInspo(id) {
+    for (var n = 0; n < state.inspo.length; n++) if (state.inspo[n].id === id) return state.inspo[n];
+    return null;
+  }
+
+  async function saveInspo(rec) {
+    rec.updatedAt = Date.now();
+    await KastDB.put(KastDB.INSPO, rec);
+    var bestaat = getInspo(rec.id);
+    if (bestaat) Object.assign(bestaat, rec);
+    else state.inspo.push(rec);
+  }
+
+  /* Weghalen neemt de foto mee: een inspiratiefoto hoort bij precies één
+     plekje, dus er is niemand anders die hem nog gebruikt. */
+  async function removeInspo(id) {
+    var rec = getInspo(id);
+    if (!rec) return;
+    await KastDB.remove(KastDB.INSPO, id);
+    if (rec.imageId) {
+      await KastDB.remove(KastDB.IMAGES, rec.imageId);
+      forgetImage(rec.imageId);
+    }
+    state.inspo = state.inspo.filter(function (x) { return x.id !== id; });
+    var raak = state.folders.filter(function (f) { return (f.inspoIds || []).indexOf(id) !== -1; });
+    for (var n = 0; n < raak.length; n++) {
+      raak[n].inspoIds = raak[n].inspoIds.filter(function (x) { return x !== id; });
+      await KastDB.put(KastDB.FOLDERS, raak[n]);
+    }
+  }
+
+  function folderInspo(f) {
+    return (f.inspoIds || []).map(getInspo).filter(Boolean);
   }
 
   function normalizeOutfit(o) {
@@ -1837,6 +1900,21 @@
 
   /* De kledingstukken van alle outfits in een map, zonder dubbelingen —
      genoeg voor het plaatje op de mapkaart. */
+  /* Het beeld boven een map. Normaal de kledingstukken uit de outfits, maar
+     zit er alleen inspiratie in, dan die plaatjes — anders staart een map vol
+     foto's je aan met een leeg vlak. */
+  function mapCollage(f, cls) {
+    var stukken = folderItems(f);
+    if (stukken.length) return collageHtml(stukken, cls);
+    var plaatjes = folderInspo(f).filter(function (i) { return i.imageId; }).slice(0, 4);
+    if (!plaatjes.length) return collageHtml([], cls);
+    return '<div class="' + (cls || 'collage') + ' cells-' + plaatjes.length + '">' +
+      plaatjes.map(function (i) {
+        return '<div class="collage-cell laadt">' +
+          '<img class="ph-img" data-img="' + esc(i.imageId) + ':thumb" alt=""></div>';
+      }).join('') + '</div>';
+  }
+
   function folderItems(folder) {
     var seen = {};
     var out = [];
@@ -1919,8 +1997,14 @@
 
   /* Een map weggooien laat de outfits zelf staan; het is maar een verzameling. */
   async function deleteFolder(id) {
+    /* De outfits in een map blijven bestaan — die staan ook in je overzicht.
+       De inspiratiefoto's niet: die hebben geen andere plek, dus die zouden
+       anders als onzichtbare plaatjes in de database achterblijven. */
+    var f = getFolder(id);
+    var foto = f ? (f.inspoIds || []).slice() : [];
+    for (var n = 0; n < foto.length; n++) await removeInspo(foto[n]);
     await KastDB.remove(KastDB.FOLDERS, id);
-    state.folders = state.folders.filter(function (f) { return f.id !== id; });
+    state.folders = state.folders.filter(function (x) { return x.id !== id; });
   }
 
   function wornOn(entity, date) {
@@ -3178,6 +3262,16 @@
         '<button class="btn btn-secondary btn-block" data-act="bord-open" data-id="' + esc(o.id) + '">' +
           (o.bord ? '🎨 Bord openen' : '🎨 Op het outfitbord leggen') + '</button>' +
 
+        /* Een outfit zonder kledingstukken is meestal geen outfit maar een
+           plaatje dat je ergens zag. Hier kun je dat rechtzetten zonder de
+           foto opnieuw te hoeven toevoegen. */
+        (!o.itemIds.length && o.coverImageId
+          ? '<button class="btn btn-ghost btn-block" data-act="outfit-naar-inspo" ' +
+              'data-id="' + esc(o.id) + '">🖼️ Dit is inspiratie, geen eigen outfit</button>' +
+            '<p class="hint block">Verplaatst de foto naar de inspiratie van een map. ' +
+            'Hij telt dan niet meer mee bij je outfits.</p>'
+          : '') +
+
         '<h3 class="section-title">Cijfer van Askim</h3>' +
         ratingRow(o, 'rate-outfit') +
         briefje(o, 'note-outfit') +
@@ -3717,11 +3811,19 @@
 
   function folderCardHtml(f) {
     return '<a class="outfit-card" href="#/map/' + esc(f.id) + '">' +
-      collageHtml(folderItems(f)) +
+      mapCollage(f) +
       '<div class="outfit-body">' +
         '<span class="outfit-name">' + f.icon + ' ' + esc(f.name || 'Naamloze map') + '</span>' +
-        '<span class="outfit-meta">' + plural(f.outfitIds.length, 'outfit', 'outfits') + '</span>' +
+        '<span class="outfit-meta">' + mapInhoud(f) + '</span>' +
       '</div></a>';
+  }
+
+  /* "3 outfits · 5 inspiratie" — en als er niets in zit gewoon dat. */
+  function mapInhoud(f) {
+    var delen = [];
+    if (f.outfitIds.length) delen.push(plural(f.outfitIds.length, 'outfit', 'outfits'));
+    if ((f.inspoIds || []).length) delen.push((f.inspoIds || []).length + ' inspiratie');
+    return delen.length ? delen.join(' · ') : 'nog leeg';
   }
 
   function viewFolderDetail(id) {
@@ -3730,7 +3832,7 @@
     var outfits = f.outfitIds.map(getOutfit).filter(Boolean);
 
     return '<div class="detail">' +
-      '<div class="detail-photo">' + collageHtml(folderItems(f), 'collage big') + '</div>' +
+      '<div class="detail-photo">' + mapCollage(f, 'collage big') + '</div>' +
       '<div class="detail-body">' +
         '<div class="detail-head">' +
           '<h2 class="detail-title">' + f.icon + ' ' + esc(f.name || 'Naamloze map') + '</h2>' +
@@ -3739,13 +3841,71 @@
         '<h3 class="section-title">Outfits (' + outfits.length + ')</h3>' +
         (outfits.length
           ? '<div class="list list-cards flush">' + outfits.map(outfitCardHtml).join('') + '</div>'
-          : '<p class="hint block">Deze map is nog leeg. Kies via "Bewerken" welke outfits erin horen.</p>') +
+          : '<p class="hint block">Nog geen outfits van jezelf in deze map. Kies via "Bewerken" ' +
+            'welke erin horen.</p>') +
+        inspoBlokHtml(f) +
         packListHtml(f) +
         '<div class="row-actions">' +
           '<a class="btn btn-secondary" href="#/map/' + esc(f.id) + '/edit">Bewerken</a>' +
           '<button class="btn btn-danger" data-act="delete-folder" data-id="' + esc(f.id) + '">Verwijderen</button>' +
         '</div>' +
       '</div></div>';
+  }
+
+  /* ── Inspiratie in een map ──
+     Plaatjes die je ergens vandaan hebt. Ze staan bewust in een eigen vak en
+     niet tussen de outfits: het is niet jouw kleding, dus het hoort ook niet
+     in je outfitoverzicht. */
+  function inspoBlokHtml(f) {
+    var lijst = folderInspo(f);
+    return '<h3 class="section-title">Inspiratie (' + lijst.length + ')</h3>' +
+      (lijst.length
+        ? ''
+        : '<p class="hint block">Plaatjes van internet, een screenshot of een foto van een ' +
+          'etalage. Ze blijven hier staan en komen niet tussen je eigen outfits.</p>') +
+      '<div class="inspo-raster">' +
+        lijst.map(function (i) {
+          return '<button type="button" class="inspo-tegel" data-act="inspo-open" ' +
+            'data-id="' + esc(i.id) + '" title="' + esc(i.naam || 'Inspiratie') + '">' +
+            (i.imageId
+              ? '<img class="ph-img" data-img="' + esc(i.imageId) + ':thumb" alt="">'
+              : '<span class="inspo-leeg">🖼️</span>') +
+            (i.bron ? '<span class="inspo-link" aria-hidden="true">🔗</span>' : '') +
+          '</button>';
+        }).join('') +
+        '<button type="button" class="inspo-tegel toevoegen" data-act="inspo-add" ' +
+          'data-fid="' + esc(f.id) + '" aria-label="Inspiratiefoto toevoegen">＋</button>' +
+      '</div>';
+  }
+
+  function inspoToon(id) {
+    var rec = getInspo(id);
+    if (!rec) return;
+    state.inspoOpen = id;
+    showSheet('Inspiratie',
+      '<div class="inspo-groot">' +
+        (rec.imageId ? '<img class="ph-img" data-img="' + esc(rec.imageId) + ':full" alt="">' : '') +
+      '</div>' +
+      '<form class="form" id="inspoForm" novalidate>' +
+        '<div class="field"><label for="i-naam">Naam</label>' +
+          '<input id="i-naam" class="input" type="text" value="' + esc(rec.naam) + '" ' +
+            'placeholder="Bijv. beige jas met laarzen" autocomplete="off"></div>' +
+        '<div class="field"><label for="i-bron">Waar komt het vandaan</label>' +
+          '<input id="i-bron" class="input" type="url" value="' + esc(rec.bron) + '" ' +
+            'placeholder="Link naar de webshop of het bericht" inputmode="url" ' +
+            'autocapitalize="off" spellcheck="false">' +
+          '<p class="hint block">Handig als je het later terug wilt vinden of kopen.</p></div>' +
+        '<div class="field"><label for="i-notitie">Notitie</label>' +
+          '<textarea id="i-notitie" class="input textarea" rows="2" ' +
+            'placeholder="Wat spreekt je hierin aan?">' + esc(rec.notitie) + '</textarea></div>' +
+      '</form>' +
+      (rec.bron
+        ? '<a class="btn btn-secondary btn-block" href="' + esc(rec.bron) + '" target="_blank" ' +
+          'rel="noopener noreferrer">🔗 Openen bij ' + esc(winkelNaam(rec.bron)) + '</a>'
+        : ''),
+
+      '<button class="btn btn-primary btn-block" data-act="inspo-bewaar">Opslaan</button>' +
+      '<button class="btn btn-danger btn-block" data-act="inspo-weg">Weghalen</button>');
   }
 
   /* Alle kledingstukken uit de outfits van een map, één keer, om af te vinken.
@@ -3833,6 +3993,15 @@
     if (!f.name) {
       toast('Geef de map eerst een naam');
       return;
+    }
+    /* Het formulier werkt met een kopie van de map. Heb je ondertussen een
+       inspiratiefoto toegevoegd of een paklijst afgevinkt, dan staat dat niet
+       in die kopie — en zou opslaan het weer weggooien. Die twee komen dus van
+       de map zoals hij nú is, niet uit het formulier. */
+    var nu = getFolder(f.id);
+    if (nu) {
+      f.inspoIds = (nu.inspoIds || []).slice();
+      f.packed = (nu.packed || []).slice();
     }
     await saveFolder(f);
     clearDraft();
@@ -5329,13 +5498,17 @@
       out.push({
         id: images[i].id,
         full: await blobToDataUrl(images[i].full),
-        thumb: await blobToDataUrl(images[i].thumb)
+        thumb: await blobToDataUrl(images[i].thumb),
+        // Het uitknipsel hoort erbij: zonder dit zou een teruggezette back-up
+        // al je weggehaalde achtergronden kwijt zijn.
+        cut: await blobToDataUrl(images[i].cut)
       });
     }
     var payload = {
-      app: 'kledingkast', version: 2, exportedAt: new Date().toISOString(),
+      app: 'kledingkast', version: 3, exportedAt: new Date().toISOString(),
       items: state.items, outfits: state.outfits, folders: state.folders, images: out,
       looks: state.looks,   // de inspiratie hoort ook bij je kast
+      inspo: state.inspo,   // de plaatjes die je in mappen bewaart
       weer: alleWeer()      // temperaturen per dag; klein, dus gewoon mee
     };
     return new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -5594,17 +5767,21 @@
 
     toast('Bezig met terugzetten…');
     var images = (data.images || []).map(function (rec) {
-      return {
+      var beeld = {
         id: rec.id,
         full: rec.full ? dataUrlToBlob(rec.full) : null,
         thumb: rec.thumb ? dataUrlToBlob(rec.thumb) : null
       };
+      // Back-ups van vóór versie 3 hebben geen uitknipsels; dan gewoon niet.
+      if (rec.cut) beeld.cut = dataUrlToBlob(rec.cut);
+      return beeld;
     });
     await KastDB.putMany(KastDB.IMAGES, images);
     await KastDB.putMany(KastDB.ITEMS, data.items.map(normalizeItem));
     await KastDB.putMany(KastDB.OUTFITS, (data.outfits || []).map(normalizeOutfit));
     await KastDB.putMany(KastDB.FOLDERS, folders);
     await KastDB.putMany(KastDB.LOOKS, (data.looks || []).map(normalizeLook));
+    await KastDB.putMany(KastDB.INSPO, (data.inspo || []).map(normalizeInspo));
     if (data.weer && typeof data.weer === 'object') {
       weerCache = data.weer;
       try { localStorage.setItem(WEER_KEY, JSON.stringify(data.weer)); } catch (e) { /* privémodus */ }
@@ -5799,6 +5976,88 @@
     'new-folder-from-sheet': function () { closeOverlay(); clearDraft(); go('#/map/new'); },
     'bulk-add': function () { els.fileBulk.click(); },
     'pick-photo': function () { els.filePhoto.click(); },
+
+    /* ── Inspiratie in een map ── */
+    'outfit-naar-inspo': async function (btn) {
+      var o = getOutfit(btn.getAttribute('data-id'));
+      if (!o || !o.coverImageId) return;
+      if (!state.folders.length) {
+        toast('Maak eerst een map om het in te bewaren');
+        go('#/map/new');
+        return;
+      }
+      var keuze = await choiceDialog({
+        title: 'In welke map?',
+        body: 'De foto gaat naar de inspiratie van die map en verdwijnt uit je outfits.',
+        choices: state.folders.slice()
+          .sort(function (a, b) { return b.updatedAt - a.updatedAt; })
+          .map(function (f, n) {
+            return { key: f.id, label: f.icon + ' ' + (f.name || 'Naamloze map'),
+                     hint: mapInhoud(f), primary: n === 0 };
+          })
+      });
+      if (!keuze) return;
+      var map = getFolder(keuze);
+      if (!map) return;
+
+      toonBezig('Verplaatsen…');
+      try {
+        /* De foto krijgt een eigen kopie: zo meteen wordt de outfit verwijderd,
+           en die neemt zijn eigen beelden mee. */
+        var oud = await KastDB.get(KastDB.IMAGES, o.coverImageId);
+        if (!oud) throw new Error('foto weg');
+        var nieuwId = uid('img');
+        await KastDB.put(KastDB.IMAGES, {
+          id: nieuwId, full: oud.full, thumb: oud.thumb, cut: oud.cut
+        });
+        var rec = newInspo();
+        rec.imageId = nieuwId;
+        rec.naam = o.name || '';
+        rec.notitie = o.notes || '';
+        await saveInspo(rec);
+        map.inspoIds = (map.inspoIds || []).concat([rec.id]);
+        await saveFolder(map);
+        await deleteOutfit(o.id);
+        verbergBezig();
+        go('#/map/' + map.id);
+        toast('Verplaatst naar je inspiratie');
+      } catch (err) {
+        verbergBezig();
+        toast('Verplaatsen lukte niet');
+      }
+    },
+    'inspo-add': function (btn) {
+      state.inspoVoorMap = btn.getAttribute('data-fid');
+      els.fileInspo.click();
+    },
+    'inspo-open': function (btn) { inspoToon(btn.getAttribute('data-id')); },
+    'inspo-bewaar': async function () {
+      var rec = getInspo(state.inspoOpen);
+      if (!rec) return;
+      var veld = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
+      rec.naam = veld('i-naam').trim();
+      rec.notitie = veld('i-notitie').trim();
+      rec.bron = netteLink(veld('i-bron'));
+      await saveInspo(rec);
+      closeOverlay();
+      render();
+      toast('Opgeslagen');
+    },
+    'inspo-weg': async function () {
+      var rec = getInspo(state.inspoOpen);
+      if (!rec) return;
+      var ok = await confirmDialog({
+        title: 'Deze inspiratiefoto weghalen?',
+        body: 'Het plaatje verdwijnt uit deze map en van dit apparaat.',
+        confirmLabel: 'Weghalen', danger: true
+      });
+      if (!ok) return;
+      await removeInspo(rec.id);
+      state.inspoOpen = null;
+      closeOverlay();
+      render();
+      toast('Weggehaald');
+    },
 
     /* ── Het outfitbord ── */
     'bord-leg': function (btn) { bordLeg(btn.getAttribute('data-id')); },
@@ -6319,7 +6578,8 @@
       if (!f) return;
       var ok = await confirmDialog({
         title: 'Map verwijderen?',
-        body: 'Alleen de map verdwijnt; de outfits erin blijven gewoon bestaan.',
+        body: 'De outfits erin blijven gewoon bestaan. De inspiratiefoto\'s in deze map ' +
+              'gaan wel mee weg, want die staan nergens anders.',
         confirmLabel: 'Verwijderen', danger: true
       });
       if (!ok) return;
@@ -6726,7 +6986,8 @@
     'wipe': async function () {
       var ok = await confirmDialog({
         title: 'Alles verwijderen?',
-        body: 'Al je kledingstukken, outfits, mappen, looks en foto\'s worden gewist. Dit kan niet ongedaan worden gemaakt.',
+        body: 'Al je kledingstukken, outfits, mappen, looks, inspiratiefoto\'s en foto\'s ' +
+              'worden gewist. Dit kan niet ongedaan worden gemaakt.',
         confirmLabel: 'Alles wissen', danger: true
       });
       if (!ok) return;
@@ -6873,6 +7134,41 @@
     else if (herkend) toast('Kleur uit de foto: ' + herkend.map(colorLabel).join(' en '));
   }
 
+  /* Een inspiratiefoto is een plaatje van buiten: een screenshot, iets uit een
+     webshop. Hij gaat door dezelfde verkleiner als de rest, maar belandt in de
+     map en niet in je kast. */
+  async function onInspoChosen(ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    ev.target.value = '';
+    var map = getFolder(state.inspoVoorMap);
+    state.inspoVoorMap = null;
+    if (!files.length || !map) return;
+
+    toonBezig(files.length > 1 ? files.length + ' foto\'s toevoegen…' : 'Foto toevoegen…');
+    var gelukt = 0;
+    for (var i = 0; i < files.length; i++) {
+      try {
+        var verkleind = await processImage(files[i]);
+        var imgId = uid('img');
+        await KastDB.put(KastDB.IMAGES, { id: imgId, full: verkleind.full, thumb: verkleind.thumb });
+        var rec = newInspo();
+        rec.imageId = imgId;
+        await saveInspo(rec);
+        map.inspoIds = (map.inspoIds || []).concat([rec.id]);
+        gelukt++;
+      } catch (err) { /* onleesbare bestanden overslaan */ }
+    }
+    if (gelukt) {
+      map.updatedAt = Date.now();
+      await KastDB.put(KastDB.FOLDERS, map);
+    }
+    verbergBezig();
+    render();
+    toast(gelukt
+      ? plural(gelukt, 'foto', 'foto\'s') + ' bij je inspiratie'
+      : 'Kan deze foto niet gebruiken');
+  }
+
   async function onBulkChosen(ev) {
     var files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = '';
@@ -6911,18 +7207,21 @@
       KastDB.getAll(KastDB.ITEMS),
       KastDB.getAll(KastDB.OUTFITS),
       KastDB.getAll(KastDB.FOLDERS),
-      KastDB.getAll(KastDB.LOOKS)
+      KastDB.getAll(KastDB.LOOKS),
+      KastDB.getAll(KastDB.INSPO)
     ]);
     // Oudere of geïmporteerde records missen soms een veld; hier één keer rechtzetten.
     state.items = (res[0] || []).map(normalizeItem);
     state.outfits = (res[1] || []).map(normalizeOutfit);
     state.folders = (res[2] || []).map(function (f) {
       f.outfitIds = f.outfitIds || [];
+      f.inspoIds = f.inspoIds || [];
       f.icon = f.icon || '📁';
       f.packed = f.packed || [];
       return f;
     });
     state.looks = (res[3] || []).map(normalizeLook);
+    state.inspo = (res[4] || []).map(normalizeInspo);
     await laadKnipsels();
   }
 
@@ -6934,6 +7233,7 @@
     els.toast = document.getElementById('toast');
     els.filePhoto = document.getElementById('filePhoto');
     els.fileBulk = document.getElementById('fileBulk');
+    els.fileInspo = document.getElementById('fileInspo');
     els.fileImport = document.getElementById('fileImport');
 
     applyTheme(currentTheme());
@@ -6944,6 +7244,7 @@
     document.addEventListener('keydown', onKeydown);
     els.filePhoto.addEventListener('change', onPhotoChosen);
     els.fileBulk.addEventListener('change', onBulkChosen);
+    els.fileInspo.addEventListener('change', onInspoChosen);
     els.fileImport.addEventListener('change', onImportChosen);
 
     window.addEventListener('hashchange', function () {

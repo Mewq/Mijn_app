@@ -6,12 +6,13 @@
   'use strict';
 
   var DB_NAME = 'kledingkast-online';
-  var DB_VERSION = 3;
+  var DB_VERSION = 4;
   var STORE_ITEMS = 'items';
   var STORE_OUTFITS = 'outfits';
   var STORE_IMAGES = 'images';
   var STORE_FOLDERS = 'folders';
   var STORE_LOOKS = 'looks';
+  var STORE_INSPO = 'inspo';
 
   var dbPromise = null;
 
@@ -37,6 +38,12 @@
         // v3: looks — gedeelde outfits, van jou of van iemand anders gekregen
         if (!db.objectStoreNames.contains(STORE_LOOKS)) {
           db.createObjectStore(STORE_LOOKS, { keyPath: 'id' });
+        }
+        /* v4: inspiratiefoto's — plaatjes van het internet die je in een map
+           bewaart. Met opzet géén outfits: ze horen niet tussen de kleding die
+           je zelf hebt, hebben geen kledingstukken en worden niet gedragen. */
+        if (!db.objectStoreNames.contains(STORE_INSPO)) {
+          db.createObjectStore(STORE_INSPO, { keyPath: 'id' });
         }
         void ev;
       };
@@ -106,7 +113,7 @@
   }
 
   function clearAll() {
-    var alles = [STORE_ITEMS, STORE_OUTFITS, STORE_IMAGES, STORE_FOLDERS, STORE_LOOKS];
+    var alles = [STORE_ITEMS, STORE_OUTFITS, STORE_IMAGES, STORE_FOLDERS, STORE_LOOKS, STORE_INSPO];
     return tx(alles, 'readwrite').then(function (t) {
       alles.forEach(function (naam) { t.objectStore(naam).clear(); });
       return done(t, true);
@@ -119,6 +126,7 @@
     IMAGES: STORE_IMAGES,
     FOLDERS: STORE_FOLDERS,
     LOOKS: STORE_LOOKS,
+    INSPO: STORE_INSPO,
     open: open,
     getAll: getAll,
     get: get,
