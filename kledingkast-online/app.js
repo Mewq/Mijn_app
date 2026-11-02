@@ -6057,9 +6057,24 @@
         toast('Verplaatsen lukte niet');
       }
     },
-    'inspo-add': function (btn) {
-      state.inspoVoorMap = btn.getAttribute('data-fid');
-      els.fileInspo.click();
+    'inspo-add': async function (btn) {
+      var mapId = btn.getAttribute('data-fid');
+      var hoe = await choiceDialog({
+        title: 'Inspiratie toevoegen',
+        body: 'Waar komt het plaatje vandaan?',
+        choices: [
+          { key: 'fotos', label: '🖼️ Uit je foto\'s', primary: true,
+            hint: 'Kies een of meer plaatjes uit je fotorollen' },
+          { key: 'camera', label: '📷 Foto maken',
+            hint: 'Bijvoorbeeld van een etalage of een tijdschrift' },
+          { key: 'plakken', label: '📋 Plakken',
+            hint: 'Een plaatje dat je ergens gekopieerd hebt' }
+        ]
+      });
+      if (!hoe) return;
+      if (hoe === 'plakken') { plakInspo(mapId); return; }
+      state.inspoVoorMap = mapId;
+      (hoe === 'camera' ? els.fileInspoCam : els.fileInspo).click();
     },
     'inspo-open': function (btn) { inspoToon(btn.getAttribute('data-id')); },
     'inspo-bewaar': async function () {
@@ -7182,18 +7197,15 @@
   /* Een inspiratiefoto is een plaatje van buiten: een screenshot, iets uit een
      webshop. Hij gaat door dezelfde verkleiner als de rest, maar belandt in de
      map en niet in je kast. */
-  async function onInspoChosen(ev) {
-    var files = Array.prototype.slice.call(ev.target.files || []);
-    ev.target.value = '';
-    var map = getFolder(state.inspoVoorMap);
-    state.inspoVoorMap = null;
-    if (!files.length || !map) return;
-
-    toonBezig(files.length > 1 ? files.length + ' foto\'s toevoegen…' : 'Foto toevoegen…');
+  /* Een plaatje kan op drie manieren binnenkomen: uit je fotorollen, rechtstreeks
+     van de camera, of van het klembord. Vanaf hier is het pad hetzelfde. */
+  async function voegInspoToe(beelden, map) {
+    if (!beelden.length || !map) return 0;
+    toonBezig(beelden.length > 1 ? beelden.length + ' foto\'s toevoegen…' : 'Foto toevoegen…');
     var gelukt = 0;
-    for (var i = 0; i < files.length; i++) {
+    for (var i = 0; i < beelden.length; i++) {
       try {
-        var verkleind = await processImage(files[i]);
+        var verkleind = await processImage(beelden[i]);
         var imgId = uid('img');
         await KastDB.put(KastDB.IMAGES, { id: imgId, full: verkleind.full, thumb: verkleind.thumb });
         var rec = newInspo();
@@ -7201,7 +7213,7 @@
         await saveInspo(rec);
         map.inspoIds = (map.inspoIds || []).concat([rec.id]);
         gelukt++;
-      } catch (err) { /* onleesbare bestanden overslaan */ }
+      } catch (err) { /* onleesbare plaatjes overslaan */ }
     }
     if (gelukt) {
       map.updatedAt = Date.now();
@@ -7211,7 +7223,59 @@
     render();
     toast(gelukt
       ? plural(gelukt, 'foto', 'foto\'s') + ' bij je inspiratie'
-      : 'Kan deze foto niet gebruiken');
+      : 'Kan dit plaatje niet gebruiken');
+    return gelukt;
+  }
+
+  async function onInspoChosen(ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    ev.target.value = '';
+    var map = getFolder(state.inspoVoorMap);
+    state.inspoVoorMap = null;
+    await voegInspoToe(files, map);
+  }
+
+  /* Van het klembord. Dit is de weg die helemaal langs het bestandsmenu van je
+     telefoon heen gaat: kopieer een plaatje in Instagram of je browser, en plak
+     het hier. */
+  async function plakInspo(mapId) {
+    var map = getFolder(mapId);
+    if (!map) return;
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      toast('Plakken kan niet in deze browser — kies "Uit je foto\'s"');
+      return;
+    }
+    var beelden = [];
+    try {
+      var stukken = await navigator.clipboard.read();
+      for (var i = 0; i < stukken.length; i++) {
+        var soort = stukken[i].types.filter(function (t) { return t.indexOf('image/') === 0; })[0];
+        if (!soort) continue;
+        beelden.push(await stukken[i].getType(soort));
+      }
+    } catch (err) {
+      // Geweigerd of niets op het klembord: allebei iets om gewoon te zeggen.
+      toast('Geen plaatje op je klembord');
+      return;
+    }
+    if (!beelden.length) { toast('Geen plaatje op je klembord'); return; }
+    await voegInspoToe(beelden, map);
+  }
+
+  /* Ctrl+V of lang drukken en plakken terwijl een map openstaat. Dan hoef je
+     niet eerst een knop te zoeken. */
+  function hangPlakken() {
+    document.addEventListener('paste', async function (ev) {
+      var deel = (location.hash || '').split('/');
+      if (deel[1] !== 'map' || !deel[2] || deel[3]) return;
+      var map = getFolder(deel[2]);
+      if (!map || !ev.clipboardData) return;
+      var beelden = Array.prototype.slice.call(ev.clipboardData.files || [])
+        .filter(function (f) { return f.type.indexOf('image/') === 0; });
+      if (!beelden.length) return;
+      ev.preventDefault();
+      await voegInspoToe(beelden, map);
+    });
   }
 
   async function onBulkChosen(ev) {
@@ -7279,6 +7343,7 @@
     els.filePhoto = document.getElementById('filePhoto');
     els.fileBulk = document.getElementById('fileBulk');
     els.fileInspo = document.getElementById('fileInspo');
+    els.fileInspoCam = document.getElementById('fileInspoCam');
     els.fileImport = document.getElementById('fileImport');
 
     applyTheme(currentTheme());
@@ -7290,6 +7355,8 @@
     els.filePhoto.addEventListener('change', onPhotoChosen);
     els.fileBulk.addEventListener('change', onBulkChosen);
     els.fileInspo.addEventListener('change', onInspoChosen);
+    els.fileInspoCam.addEventListener('change', onInspoChosen);
+    hangPlakken();
     els.fileImport.addEventListener('change', onImportChosen);
 
     window.addEventListener('hashchange', function () {

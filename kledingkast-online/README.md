@@ -594,6 +594,17 @@ ondertussen een inspiratiefoto toe, dan staat die niet in die kopie, en zou
 opslaan hem weggooien. `commitFolder()` haalt `inspoIds` en `packed` daarom van
 de map zoals hij op dat moment is, niet uit het formulier.
 
+Een plaatje kan op drie manieren binnenkomen, en dat is met opzet. Het
+bestandsmenu van een telefoon zet "Bestanden" naast "Foto's", en daar kan een
+webapp niets aan veranderen — dus staan er twee wegen naast die er helemaal
+langs gaan. `capture="environment"` stuurt rechtstreeks naar de camera, en
+`navigator.clipboard.read()` pakt een gekopieerd plaatje. Voor iets van
+internet is plakken meestal de kortste weg. Alle drie komen uit bij
+`voegInspoToe()`; daarvoor is het pad verschillend, daarna niet meer.
+
+Er luistert ook een `paste` op het document: staat er een map open, dan werkt
+Ctrl+V of lang drukken en plakken zonder dat je eerst een knop zoekt.
+
 Een outfit zonder kledingstukken is meestal zo'n plaatje dat als outfit is
 binnengekomen. Op zo'n outfit staat een knop om hem alsnog naar de inspiratie
 van een map te verplaatsen.
